@@ -7,6 +7,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      telegram_test:
+        description: 'Send the Telegram release notification as a test (no release is created)'
+        type: boolean
+        default: false
 
 # 默认最小权限；发布所需的 contents: write 仅在具体 job 上提升
 permissions:
@@ -253,21 +258,44 @@ jobs:
             更新日志 / Changelog: https://github.com/NekoBoxHQ/NekoBoxPro/releases
 
       - name: Notify Telegram Group
-        if: startsWith(github.ref, 'refs/tags/')
+        # 手动触发并勾选 telegram_test 时也发送，用于在不发版的情况下验证消息编码。
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.telegram_test == 'true'
         shell: bash
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          export LANG=C.UTF-8 LC_ALL=C.UTF-8
-          MSG=$(printf '<b>NekoBoxPro v%s 已发布</b>\n\nsing-box %s\nWindows / Linux\n%s' \
+          # NOTE: this script is deliberately 100% ASCII (comments included).
+          # The message body carries non-ASCII ("released" in Chinese), and it is
+          # produced from \xHH byte escapes rather than written literally, then
+          # handed to curl via a file (text@file) instead of an argument.
+          #
+          # Why: the previous version put the Chinese text both in the script file
+          # and in curl's argv, and both paths can degrade non-ASCII. A script
+          # written to disk in a non-UTF-8 codepage yields mojibake; arguments
+          # converted between Windows codepages collapse each CJK character to a
+          # single '?' (the report was: "NekoBoxPro v5.0.12 ???"). With this shape
+          # the bytes never touch the script file or argv, so the output is a
+          # fixed, encoding-independent UTF-8 byte string.
+          #
+          #   \xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83  ==  the Chinese for "released"
+          MSG_FILE="$(mktemp)"
+          printf '<b>NekoBoxPro v%s \xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83</b>\n\nsing-box %s\nWindows / Linux\n%s' \
             "${{ env.NEKO_VERSION }}" \
             "${{ env.SING_BOX_VERSION }}" \
-            "https://github.com/NekoBoxHQ/NekoBoxPro")
-          curl -s -m 60 --retry 2 --retry-delay 5 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            "https://github.com/NekoBoxHQ/NekoBoxPro" > "$MSG_FILE"
+          # Self-check: expected to be exactly 109 bytes at 5.0.12 / v1.14.2.
+          # If this number is ever off, the body was already damaged before the
+          # request left the runner, so the fault is here and not on Telegram's side.
+          echo "telegram message bytes: $(wc -c < "$MSG_FILE")"
+          # -sS: stay quiet but still surface errors. It used to be plain -s, so a
+          # Telegram API error was swallowed and the step still reported success.
+          curl -sS -m 60 --retry 2 --retry-delay 5 -X POST \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d "chat_id=${TG_CHAT}" \
-            --data-urlencode "text=${MSG}" \
+            --data-urlencode "text@${MSG_FILE}" \
             -d "parse_mode=HTML"
+          rm -f "$MSG_FILE"
 
   build-linux:
     runs-on: ubuntu-22.04
