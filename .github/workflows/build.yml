@@ -214,7 +214,7 @@ jobs:
             "${{ env.NEKO_VERSION }}" \
             "${{ env.SING_BOX_VERSION }}" \
             "https://github.com/NekoBoxHQ/NekoBoxPro")
-          curl -s -m 30 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+          curl -s -m 60 --retry 2 --retry-delay 5 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d "chat_id=${TG_CHAT}" \
             --data-urlencode "text=${MSG}" \
             -d "parse_mode=HTML"
@@ -363,8 +363,8 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          export PATH="$Qt6_DIR/../../bin:$PATH"
-          export QMAKE="$Qt6_DIR/../../bin/qmake"
+          export PATH="$Qt6_DIR/../../../bin:$PATH"
+          export QMAKE="$Qt6_DIR/../../../bin/qmake"
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
