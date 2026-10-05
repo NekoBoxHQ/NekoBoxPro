@@ -17,7 +17,10 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string notr="true">NekoBoxPro 5.0.11</string>
+   <!-- 仅作为 Designer 占位符；运行时会由 MainWindow::refresh_status 用
+        software_name + NKR_VERSION 调 setWindowTitle() 覆盖。此处不写版本号，
+        避免每次发版都要手工同步（漏改就会显示过期版本）。 -->
+   <string notr="true">NekoBoxPro</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_3" stretch="0,0,0">

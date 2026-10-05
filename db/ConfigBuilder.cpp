@@ -4,6 +4,7 @@
 #include "fmt/Preset.hpp"
 
 #include <QApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -751,8 +752,17 @@ namespace NekoGui {
             }
             auto srsPath = ruleSetDir + "/" + srsName;
             if (!QFile::exists(srsPath)) {
+                // 内置 sing-box CLI 的文件名随平台不同：原实现硬编码 "sing-box.exe"，
+                // Linux/macOS 上永远找不到该文件 → 静默跳过 rule_set 导出，
+                // 而路由里仍引用 geoip-*/geosite-* 标签，sing-box 启动即报 rule_set not found。
+#ifdef Q_OS_WIN
                 auto cli = QApplication::applicationDirPath() + "/sing-box.exe";
-                if (QFile::exists(cli)) {
+#else
+                auto cli = QApplication::applicationDirPath() + "/sing-box";
+#endif
+                if (!QFile::exists(cli)) {
+                    qWarning() << "geo rule_set export skipped: sing-box CLI not found at" << cli;
+                } else {
                     QProcess p;
                     p.setWorkingDirectory(ruleSetDir);
                     if (tag.startsWith("geoip-")) {

@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(nekobox VERSION 5.0.11 LANGUAGES CXX)
+# 版本号单一来源：nekoray_version.txt（cmake/nkr.cmake 也读同一文件生成 NKR_VERSION 宏）。
+# 在此先读一次给 project()，避免 CMake 项目版本与运行时宏各写一份、发版漏改其中之一。
+# 先剔除空白与行尾 CR——Windows 工作区（core.autocrlf）下该文件是 CRLF，
+# 直接拿去比对会让版本号里混进 \r，故此处规范化后再校验。
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/nekoray_version.txt" NEKO_VERSION_RAW)
+string(REGEX REPLACE "[^0-9.]" "" NEKO_PROJECT_VERSION "${NEKO_VERSION_RAW}")
+if (NOT NEKO_PROJECT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "nekoray_version.txt 不是 x.y.z 形式的版本号：'${NEKO_VERSION_RAW}'")
+endif ()
+
+project(nekobox VERSION ${NEKO_PROJECT_VERSION} LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 

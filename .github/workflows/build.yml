@@ -35,6 +35,19 @@ jobs:
         with:
           submodules: recursive
 
+      # 版本号有多个落点：nekoray_version.txt（运行时 NKR_VERSION 宏与 CMake 项目版本的唯一来源）、
+      # 本工作流的 NEKO_VERSION（Go ldflags 与 Release 文案）。发版时漏改其中之一会静默发出
+      # 版本号自相矛盾的产物，这里直接失败。
+      - name: Verify version consistency
+        shell: bash
+        run: |
+          FILE_VER="$(tr -d ' \t\r\n' < nekoray_version.txt)"
+          if [ "$FILE_VER" != "${{ env.NEKO_VERSION }}" ]; then
+            echo "::error::版本号不一致：nekoray_version.txt='$FILE_VER' 但工作流 NEKO_VERSION='${{ env.NEKO_VERSION }}'"
+            exit 1
+          fi
+          echo "version ok: $FILE_VER"
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -105,13 +118,14 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/../sing-box"
-          go build -o "$GITHUB_WORKSPACE/deployment/windows64/sing-box.exe" ./cmd/sing-box
+          # -trimpath -ldflags "-w -s"：与 nekobox_core 一致，去除路径、DWARF 与符号表
+          go build -trimpath -ldflags "-w -s" -o "$GITHUB_WORKSPACE/deployment/windows64/sing-box.exe" ./cmd/sing-box
 
       - name: Build updater
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/go/cmd/updater"
-          go build -o "$GITHUB_WORKSPACE/deployment/windows64/updater.exe" .
+          go build -trimpath -ldflags "-w -s" -o "$GITHUB_WORKSPACE/deployment/windows64/updater.exe" .
 
       - name: MSVC x64 environment
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
@@ -133,12 +147,20 @@ jobs:
           echo "Qt6_DIR=$QTP/lib/cmake/Qt6" >> "$GITHUB_ENV"
 
       - name: Cache deps
+        id: deps_cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: $GITHUB_WORKSPACE/deps/built
           key: neko-deps-${{ runner.os }}-v2
 
+      # 缓存命中时 Build deps 整步会被跳过，DEPS_ROOT 必须在这里无条件导出，
+      # 否则 Configure 步骤拿到空值、构建失败。
+      - name: Set DEPS_ROOT
+        shell: bash
+        run: echo "DEPS_ROOT=$GITHUB_WORKSPACE/deps/built" >> "$GITHUB_ENV"
+
       - name: Build deps (protobuf / yaml-cpp / zxing-cpp)
+        if: steps.deps_cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           python -m pip install --quiet ninja
@@ -161,7 +183,6 @@ jobs:
           cmake -GNinja -S "$DEPS/src/zxing-cpp" -B "$DEPS/build-zxing" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BLACKBOX_TESTS=OFF
           cmake --build "$DEPS/build-zxing" -j4 --target install
-          echo "DEPS_ROOT=$DEPS/built" >> "$GITHUB_ENV"
 
       - name: Configure & build GUI (nekobox.exe)
         shell: bash
@@ -258,6 +279,19 @@ jobs:
         with:
           submodules: recursive
 
+      # 版本号有多个落点：nekoray_version.txt（运行时 NKR_VERSION 宏与 CMake 项目版本的唯一来源）、
+      # 本工作流的 NEKO_VERSION（Go ldflags 与 Release 文案）。发版时漏改其中之一会静默发出
+      # 版本号自相矛盾的产物，这里直接失败。
+      - name: Verify version consistency
+        shell: bash
+        run: |
+          FILE_VER="$(tr -d ' \t\r\n' < nekoray_version.txt)"
+          if [ "$FILE_VER" != "${{ env.NEKO_VERSION }}" ]; then
+            echo "::error::版本号不一致：nekoray_version.txt='$FILE_VER' 但工作流 NEKO_VERSION='${{ env.NEKO_VERSION }}'"
+            exit 1
+          fi
+          echo "version ok: $FILE_VER"
+
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -328,13 +362,14 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/../sing-box"
-          go build -o "$GITHUB_WORKSPACE/deployment/linux64/sing-box" ./cmd/sing-box
+          # -trimpath -ldflags "-w -s"：与 nekobox_core 一致，去除路径、DWARF 与符号表
+          go build -trimpath -ldflags "-w -s" -o "$GITHUB_WORKSPACE/deployment/linux64/sing-box" ./cmd/sing-box
 
       - name: Build updater
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/go/cmd/updater"
-          go build -o "$GITHUB_WORKSPACE/deployment/linux64/updater" .
+          go build -trimpath -ldflags "-w -s" -o "$GITHUB_WORKSPACE/deployment/linux64/updater" .
 
       - name: Setup Python 3.12 (for aqtinstall)
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -353,12 +388,20 @@ jobs:
           echo "Qt6_DIR=$QTP/lib/cmake/Qt6" >> "$GITHUB_ENV"
 
       - name: Cache deps
+        id: deps_cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: $GITHUB_WORKSPACE/deps/built
           key: neko-deps-${{ runner.os }}-v2
 
+      # 缓存命中时 Build deps 整步会被跳过，DEPS_ROOT 必须在这里无条件导出，
+      # 否则 Configure 步骤拿到空值、构建失败。
+      - name: Set DEPS_ROOT
+        shell: bash
+        run: echo "DEPS_ROOT=$GITHUB_WORKSPACE/deps/built" >> "$GITHUB_ENV"
+
       - name: Build deps (protobuf / yaml-cpp / zxing-cpp)
+        if: steps.deps_cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           sudo apt-get update
@@ -382,7 +425,6 @@ jobs:
           cmake -GNinja -S "$DEPS/src/zxing-cpp" -B "$DEPS/build-zxing" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BLACKBOX_TESTS=OFF
           cmake --build "$DEPS/build-zxing" -j4 --target install
-          echo "DEPS_ROOT=$DEPS/built" >> "$GITHUB_ENV"
 
       - name: Install system dependencies
         shell: bash
@@ -429,6 +471,20 @@ jobs:
           mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           printf '[Desktop Entry]\nType=Application\nName=NekoBoxPro\nComment=NekoBoxPro proxy client\nExec=nekoboxpro\nIcon=nekobox\nCategories=Network;Qt;\nTerminal=false\n' > AppDir/usr/share/applications/nekobox.desktop
           cp res/public/nekobox.png AppDir/usr/share/icons/hicolor/256x256/apps/nekobox.png
+          # linuxdeploy 只打包 --executable 指定的可执行文件及其共享库依赖（Qt），
+          # 不会带上同目录的内核、更新器与 geo 数据。而程序只在
+          # applicationDirPath() 下查找 nekobox_core（main/NekoGui.cpp
+          # FindNekoBoxCoreRealPath，无 PATH 回退），因此必须显式放入 AppDir/usr/bin ——
+          # 否则产出的 AppImage 缺内核，用户「下载直接运行」会无法启动代理。
+          mkdir -p AppDir/usr/bin
+          cp deployment/linux64/nekobox_core \
+             deployment/linux64/sing-box \
+             deployment/linux64/updater \
+             deployment/linux64/geoip.dat \
+             deployment/linux64/geoip.db \
+             deployment/linux64/geosite.dat \
+             deployment/linux64/geosite.db \
+             AppDir/usr/bin/
           export LDAI_OUTPUT="NekoBoxPro-Linux-x64.AppImage"
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --executable deployment/linux64/nekoboxpro \

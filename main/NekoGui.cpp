@@ -191,6 +191,21 @@ namespace NekoGui_ConfigItem {
 
         QFile file;
         file.setFileName(fn);
+
+        // Save() 在高频路径上被反复调用（切换节点、改任意设置、更新订阅……），
+        // 内容未变时原先仍会 Truncate + 重写整个 JSON：既产生无谓 I/O，也把 mtime 一路刷新。
+        // 因此内容未变且文件仍在时直接返回；文件被外部删除的情况仍走下面的写入分支重建。
+        if (!changed && file.exists()) {
+#ifndef Q_OS_WIN
+            // 顺带修复历史遗留的宽权限（旧版本创建的文件是 0644，同机其他用户可读）。
+            // Windows 上 setPermissions 为 no-op，无需处理。
+            if (file.permissions() != (QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+                file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+            }
+#endif
+            return false;
+        }
+
         file.open(QIODevice::ReadWrite | QIODevice::Truncate);
         // 这些文件保存订阅地址、节点密码/UUID/PSK、入站密码、Clash API secret。
         // 默认权限为 0644（同机其他用户可读），显式收紧为 0600（仅属主可读写）。
