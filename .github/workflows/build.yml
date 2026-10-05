@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.13
+  NEKO_VERSION: 5.0.14
   SING_BOX_VERSION: v1.14.2
   # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
   LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61
@@ -260,25 +260,32 @@ jobs:
       - name: Notify Telegram Group
         # 手动触发并勾选 telegram_test 时也发送，用于在不发版的情况下验证消息编码。
         if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.telegram_test == 'true'
+        # 通知只是锦上添花：它失败不该把一次产物已经发布成功的运行染红。
+        # v5.0.13 就是这样变红的——两个平台的 Release 都发布成功了。
+        continue-on-error: true
         shell: bash
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           # NOTE: this script is deliberately 100% ASCII (comments included).
-          # The message body carries non-ASCII ("released" in Chinese), and it is
-          # produced from \xHH byte escapes rather than written literally, then
-          # handed to curl via a file (text@file) instead of an argument.
           #
-          # Why: the previous version put the Chinese text both in the script file
-          # and in curl's argv, and both paths can degrade non-ASCII. A script
-          # written to disk in a non-UTF-8 codepage yields mojibake; arguments
-          # converted between Windows codepages collapse each CJK character to a
-          # single '?' (the report was: "NekoBoxPro v5.0.12 ???"). With this shape
-          # the bytes never touch the script file or argv, so the output is a
-          # fixed, encoding-independent UTF-8 byte string.
+          # Root cause of the garbled notification, now pinned down: the `curl`
+          # that wins on this runner is the native Windows curl.exe, not Git
+          # Bash's MSYS build. When MSYS launches a native program it converts
+          # argv to that process's code page, and CP1252 cannot represent CJK, so
+          # every Chinese character collapsed to a single '?' -- the message read
+          # "NekoBoxPro v5.0.12 ???". The same mismatch showed up from the other
+          # side when the body was passed as a file: a POSIX path went to native
+          # curl, which could not open it and exited 26.
           #
-          #   \xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83  ==  the Chinese for "released"
+          # So the body now avoids both the script file and argv:
+          #   * it is produced from \xHH byte escapes, so no non-ASCII byte exists
+          #     anywhere in this script;
+          #   * bash writes it to a file and feeds it to curl over stdin using
+          #     `--data-urlencode text@-`, so curl never sees the text, nor a
+          #     path, in its argument vector.
+          # \xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83 below is the Chinese for "released".
           MSG_FILE="$(mktemp)"
           printf '<b>NekoBoxPro v%s \xe5\xb7\xb2\xe5\x8f\x91\xe5\xb8\x83</b>\n\nsing-box %s\nWindows / Linux\n%s' \
             "${{ env.NEKO_VERSION }}" \
@@ -294,8 +301,8 @@ jobs:
           curl -sS -m 60 --retry 2 --retry-delay 5 -X POST \
             "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d "chat_id=${TG_CHAT}" \
-            --data-urlencode "text@${MSG_FILE}" \
-            -d "parse_mode=HTML"
+            --data-urlencode "text@-" \
+            -d "parse_mode=HTML" < "$MSG_FILE"
           rm -f "$MSG_FILE"
 
   build-linux:
