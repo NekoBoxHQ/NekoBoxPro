@@ -64,7 +64,13 @@ namespace NekoGui_sub {
             needFix = false;
             auto link = QUrl(str);
             if (!link.isValid()) return;
-            ent = NekoGui::ProfileManager::NewProxyEntity(link.host());
+            // 远程订阅禁止注入自定义进程类节点（custom/chain 仅允许手动导入）
+            auto host = link.host();
+            if (from_remote && (host == "custom" || host == "chain")) {
+                MW_show_log(QObject::tr("[security] 订阅包含 %1 类型节点，已跳过（该类型仅允许手动导入）").arg(host));
+                return;
+            }
+            ent = NekoGui::ProfileManager::NewProxyEntity(host);
             if (ent->bean->version == -114514) return;
             auto j = DecodeB64IfValid(link.fragment().toUtf8(), QByteArray::Base64UrlEncoding);
             if (j.isEmpty()) return;
@@ -258,6 +264,12 @@ namespace NekoGui_sub {
             for (auto proxy: proxies) {
                 auto type = Node2QString(proxy["type"]).toLower();
                 auto type_clash = type;
+
+                // 远程订阅禁止自定义进程类节点（clash 规范无 custom/chain 类型，防御恶意声明）
+                if (from_remote && (type == "custom" || type == "chain")) {
+                    MW_show_log(QObject::tr("[security] 订阅包含 %1 类型节点，已跳过（该类型仅允许手动导入）").arg(type));
+                    continue;
+                }
 
                 if (type == "ss" || type == "ssr") type = "shadowsocks";
                 if (type == "socks5") type = "socks";
@@ -549,6 +561,7 @@ namespace NekoGui_sub {
         QString sub_user_info;
         bool asURL = _sub_gid >= 0 || _not_sub_as_url; // 把 _str 当作 url 处理（下载内容）
         auto content = _str.trimmed();
+        rawUpdater->from_remote = asURL; // 远程下载的订阅内容不得决定自定义 bean 类型
         auto group = NekoGui::profileManager->GetGroup(_sub_gid);
         if (group != nullptr && group->archive) return;
 

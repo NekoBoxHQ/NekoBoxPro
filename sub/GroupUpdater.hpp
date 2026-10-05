@@ -9,6 +9,8 @@ namespace NekoGui_sub {
 
         void update(const QString &str);
 
+        bool from_remote = false; // 解析来源是否为远程订阅（远程内容不得决定自定义 bean 类型）
+
         int gid_add_to = -1; // 导入到指定组 -1 为当前选中组
 
         QList<std::shared_ptr<NekoGui::ProxyEntity>> updated_order; // 新增的配置，按照导入时处理的先后排序

@@ -3,7 +3,7 @@
 ### 目录结构
 
 ```
-  | nekoray
+  | nekobox
   |   go/cmd/*
   | sing-box-extra
   | sing-box
@@ -17,7 +17,7 @@
 
 具体支持的 GOOS 和 GOARCH 请看 `libs/build_go.sh`
 
-非官方构建无需编译 `updater` `launcher`
+非官方构建无需编译 `updater`
 
 ### sing-box tags
 

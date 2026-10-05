@@ -1,15 +1,33 @@
 package main
 
 import (
-	"context"
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/codeclysm/extract"
+	"github.com/jedisct1/go-minisign"
 )
+
+// minisign 发布公钥（编译进二进制的信任锚）。
+//
+// 首次启用签名发布时需要完成：
+//  1. 生成密钥对：minisign -G -s nekobox.key -p nekobox.pub
+//  2. 将私钥内容加入 GitHub Secrets：NEKO_MINISIGN_SECRET_KEY
+//  3. 将公钥内容替换到下方常量（保留 "RW..." 前缀）
+//
+// 公钥未配置（仍为占位值）时，验签必然失败，更新将拒绝执行（fail-closed），
+// 防止任何无签名更新落地。
+const minisignPublicKey = "RWS_PLACEHOLDER_REPLACE_WITH_REAL_PUBLIC_KEY"
+
+// maxExtractSize 是解压内容总大小上限（2 GiB），防止 zip bomb / tar bomb。
+const maxExtractSize = 2 << 30
 
 func Updater() {
 	pre_cleanup := func() {
@@ -32,29 +50,25 @@ func Updater() {
 	}
 	log.Println("updating from", updatePackagePath)
 
-	// extract update package
+	// verify minisign signature BEFORE extracting anything
+	if err := verifyUpdateSignature(updatePackagePath); err != nil {
+		MessageBoxPlain("NekoGui Updater", "Update rejected: "+err.Error())
+		log.Fatalln("signature verification failed:", err)
+	}
+	log.Println("update signature verified")
+
+	// extract update package (safe extraction)
+	pre_cleanup()
 	if strings.HasSuffix(updatePackagePath, ".zip") {
-		pre_cleanup()
-		f, err := os.Open(updatePackagePath)
+		err := safeExtractZip(updatePackagePath, "./nekobox_update")
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		err = extract.Zip(context.Background(), f, "./nekobox_update", nil)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		f.Close()
 	} else if strings.HasSuffix(updatePackagePath, ".tar.gz") {
-		pre_cleanup()
-		f, err := os.Open(updatePackagePath)
+		err := safeExtractTarGz(updatePackagePath, "./nekobox_update")
 		if err != nil {
 			log.Fatalln(err.Error())
 		}
-		err = extract.Gz(context.Background(), f, "./nekobox_update", nil)
-		if err != nil {
-			log.Fatalln(err.Error())
-		}
-		f.Close()
 	}
 
 	// remove old file
@@ -82,6 +96,168 @@ func Updater() {
 	os.Remove("./nekoray.exe")
 	os.Remove("./nekoray.png")
 	os.Remove("./nekoray_core.exe")
+}
+
+// verifyUpdateSignature 在解压前用内置公钥校验更新包的 minisign 签名。
+// 签名文件约定为 <package>.minisig（由发布方随 release 一并发布）。
+// 任何一步失败（含公钥未配置、签名文件缺失、验签失败）都会拒绝更新。
+func verifyUpdateSignature(pkgPath string) error {
+	if strings.HasPrefix(minisignPublicKey, "RWS_PLACEHOLDER") {
+		return fmt.Errorf("发布链未配置签名公钥（updater 内置公钥仍为占位值），已拒绝无签名更新")
+	}
+	sigPath := pkgPath + ".minisig"
+	if !Exist(sigPath) {
+		return fmt.Errorf("缺少签名文件 %s，已拒绝无签名更新", sigPath)
+	}
+	pk, err := minisign.NewPublicKey(minisignPublicKey)
+	if err != nil {
+		return fmt.Errorf("加载内置公钥失败: %w", err)
+	}
+	sig, err := minisign.NewSignatureFromFile(sigPath)
+	if err != nil {
+		return fmt.Errorf("加载签名文件失败: %w", err)
+	}
+	ok, err := pk.VerifyFromFile(pkgPath, sig)
+	if err != nil {
+		return fmt.Errorf("验签失败: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("验签失败: 签名与文件内容不匹配")
+	}
+	return nil
+}
+
+// safeExtractZip 安全解压 zip：拒绝符号链接/特殊文件、绝对路径与路径逃逸，
+// 并限制解压总大小。
+func safeExtractZip(pkgPath, destDir string) error {
+	r, err := zip.OpenReader(pkgPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var total int64
+	for _, f := range r.File {
+		if f.Mode()&os.ModeSymlink != 0 || f.Mode()&os.ModeIrregular != 0 {
+			return fmt.Errorf("拒绝特殊文件（symlink/设备等）: %s", f.Name)
+		}
+		if err := checkSafePath(f.Name); err != nil {
+			return err
+		}
+		dest := filepath.Join(destDir, filepath.FromSlash(f.Name))
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		w, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, f.Mode().Perm())
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		n, copyErr := io.Copy(w, rc)
+		total += n
+		rcErr := rc.Close()
+		wErr := w.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if rcErr != nil {
+			return rcErr
+		}
+		if wErr != nil {
+			return wErr
+		}
+		if total > maxExtractSize {
+			return fmt.Errorf("解压内容超过上限 %d 字节，已中止（疑似压缩炸弹）", maxExtractSize)
+		}
+	}
+	return nil
+}
+
+// safeExtractTarGz 安全解压 tar.gz：只允许普通文件与目录，拒绝
+// 符号链接/硬链接/设备等特殊类型，拒绝绝对路径与路径逃逸，限制解压总大小。
+func safeExtractTarGz(pkgPath, destDir string) error {
+	f, err := os.Open(pkgPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	var total int64
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		switch hdr.Typeflag {
+		case tar.TypeDir, tar.TypeReg, tar.TypeRegA:
+			// 允许
+		default:
+			return fmt.Errorf("拒绝特殊文件（symlink/hardlink/设备等）: %s", hdr.Name)
+		}
+		if err := checkSafePath(hdr.Name); err != nil {
+			return err
+		}
+		dest := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
+		if hdr.Typeflag == tar.TypeDir {
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			return err
+		}
+		w, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0777)
+		if err != nil {
+			return err
+		}
+		n, copyErr := io.Copy(w, tr)
+		total += n
+		wErr := w.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if wErr != nil {
+			return wErr
+		}
+		if total > maxExtractSize {
+			return fmt.Errorf("解压内容超过上限 %d 字节，已中止（疑似压缩炸弹）", maxExtractSize)
+		}
+	}
+	return nil
+}
+
+// checkSafePath 校验归档条目路径：拒绝绝对路径、"."、".." 与上级逃逸。
+func checkSafePath(name string) error {
+	norm := strings.ReplaceAll(name, "\\", "/")
+	if strings.HasPrefix(norm, "/") || filepath.IsAbs(name) {
+		return fmt.Errorf("拒绝绝对路径: %s", name)
+	}
+	for _, part := range strings.Split(norm, "/") {
+		if part == ".." {
+			return fmt.Errorf("拒绝路径逃逸: %s", name)
+		}
+	}
+	return nil
 }
 
 func Exist(path string) bool {

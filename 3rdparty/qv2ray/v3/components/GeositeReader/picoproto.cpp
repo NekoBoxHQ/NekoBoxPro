@@ -42,39 +42,48 @@ namespace picoproto {
         };
 
         // Pull bytes from the stream, updating the state.
-        bool ConsumeBytes(uint8_t **current, size_t how_many, size_t *remaining) {
-            if (how_many > *remaining) {
-                PP_LOG(ERROR) << "ReadBytes overrun!";
-                return false;
-            }
-            *current += how_many;
-            *remaining -= how_many;
-            return true;
-        }
+        // (Bounded reads are performed inline in ReadFromBytes / ReadVarInt.)
 
         // Grabs a particular type from the byte stream.
+        // Fails (sets *ok=false and returns a zero value) instead of reading
+        // out of bounds when fewer than sizeof(T) bytes remain.
         template<class T>
-        T ReadFromBytes(uint8_t **current, size_t *remaining) {
-            PP_CHECK(ConsumeBytes(current, sizeof(T), remaining));
-            const T result = *(bit_cast<T *>(*current - sizeof(T)));
+        T ReadFromBytes(uint8_t **current, size_t *remaining, bool *ok = nullptr) {
+            if (sizeof(T) > *remaining) {
+                PP_LOG(ERROR) << "ReadBytes overrun!";
+                if (ok != nullptr) *ok = false;
+                return T();
+            }
+            const T result = *(bit_cast<T *>(*current));
+            *current += sizeof(T);
+            *remaining -= sizeof(T);
             return result;
         }
 
-        uint64_t ReadVarInt(uint8_t **current, size_t *remaining) {
+        // Reads a protobuf varint. Bounded to at most 10 bytes (the maximum for a
+        // 64-bit varint); sets *ok=false on overrun or truncated input instead of
+        // shifting past 63 bits or looping forever on adversarial input.
+        uint64_t ReadVarInt(uint8_t **current, size_t *remaining, bool *ok = nullptr) {
             uint64_t result = 0;
-            bool keep_going;
             int shift = 0;
-            do {
-                const uint8_t next_number = ReadFromBytes<uint8_t>(current, remaining);
-                keep_going = (next_number >= 128);
+            for (int i = 0; i < 10; i++) {
+                if (*remaining == 0) {
+                    if (ok != nullptr) *ok = false;
+                    return result;
+                }
+                const uint8_t next_number = ReadFromBytes<uint8_t>(current, remaining, ok);
+                if (ok != nullptr && !*ok) return result;
                 result += (uint64_t) (next_number & 0x7f) << shift;
+                if (next_number < 128) return result;
                 shift += 7;
-            } while (keep_going);
+            }
+            // More than 10 continuation bytes: malformed varint.
+            if (ok != nullptr) *ok = false;
             return result;
         }
 
-        void ReadWireTypeAndFieldNumber(uint8_t **current, size_t *remaining, uint8_t *wire_type, uint32_t *field_number) {
-            uint64_t wire_type_and_field_number = ReadVarInt(current, remaining);
+        void ReadWireTypeAndFieldNumber(uint8_t **current, size_t *remaining, uint8_t *wire_type, uint32_t *field_number, bool *ok = nullptr) {
+            uint64_t wire_type_and_field_number = ReadVarInt(current, remaining, ok);
             *wire_type = wire_type_and_field_number & 0x07;
             *field_number = wire_type_and_field_number >> 3;
         }
@@ -195,26 +204,36 @@ namespace picoproto {
     bool Message::ParseFromBytes(uint8_t *bytes, size_t bytes_size) {
         uint8_t *current = bytes;
         size_t remaining = bytes_size;
-        while (remaining > 0) {
+        bool ok = true;
+        while (remaining > 0 && ok) {
             uint8_t wire_type;
             uint32_t field_number;
-            ReadWireTypeAndFieldNumber(&current, &remaining, &wire_type, &field_number);
+            ReadWireTypeAndFieldNumber(&current, &remaining, &wire_type, &field_number, &ok);
             switch (wire_type) {
                 case WIRETYPE_VARINT: {
                     Field *field = AddField(field_number, FIELD_UINT64);
-                    const uint64_t varint = ReadVarInt(&current, &remaining);
+                    const uint64_t varint = ReadVarInt(&current, &remaining, &ok);
                     field->value.v_uint64->push_back(varint);
                     break;
                 }
                 case WIRETYPE_64BIT: {
                     Field *field = AddField(field_number, FIELD_UINT64);
-                    const uint64_t value = ReadFromBytes<uint64_t>(&current, &remaining);
+                    const uint64_t value = ReadFromBytes<uint64_t>(&current, &remaining, &ok);
                     field->value.v_uint64->push_back(value);
                     break;
                 }
                 case WIRETYPE_LENGTH_DELIMITED: {
                     Field *field = AddField(field_number, FIELD_BYTES);
-                    const uint64_t size = ReadVarInt(&current, &remaining);
+                    const uint64_t size = ReadVarInt(&current, &remaining, &ok);
+                    if (!ok) break;
+                    // The declared length must not exceed the remaining bytes:
+                    // otherwise reading would overrun the buffer (and the size_t
+                    // subtraction below would underflow).
+                    if (size > remaining) {
+                        PP_LOG(ERROR) << "Length-delimited field overruns remaining bytes.";
+                        ok = false;
+                        break;
+                    }
                     uint8_t *data;
                     if (copy_arrays) {
                         data = new uint8_t[size];
@@ -242,18 +261,18 @@ namespace picoproto {
                 }
                 case WIRETYPE_32BIT: {
                     Field *field = AddField(field_number, FIELD_UINT32);
-                    const uint32_t value = ReadFromBytes<uint32_t>(&current, &remaining);
+                    const uint32_t value = ReadFromBytes<uint32_t>(&current, &remaining, &ok);
                     field->value.v_uint32->push_back(value);
                     break;
                 }
                 default: {
                     PP_LOG(ERROR) << "Unknown wire type encountered: " << static_cast<int>(wire_type) << " at offset" << (bytes_size - remaining);
-                    return false;
+                    ok = false;
                     break;
                 }
             }
         }
-        return true;
+        return ok;
     }
 
     Field *Message::AddField(int32_t number, enum FieldType type) {
@@ -274,13 +293,20 @@ namespace picoproto {
 
     Field *Message::GetFieldAndCheckType(int32_t number, enum FieldType type) {
         Field *field = GetField(number);
-        PP_CHECK(field) << "No field for " << number;
-        PP_CHECK(field->type == type) << "For field " << number << " wanted type " << FieldTypeDebugString(type) << " but found " << FieldTypeDebugString(field->type);
+        if (field == nullptr) {
+            PP_LOG(ERROR) << "No field for " << number;
+            return nullptr;
+        }
+        if (field->type != type) {
+            PP_LOG(ERROR) << "For field " << number << " wanted type " << FieldTypeDebugString(type) << " but found " << FieldTypeDebugString(field->type);
+            return nullptr;
+        }
         return field;
     }
 
     int32_t Message::GetInt32(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_UINT32);
+        if (field == nullptr || field->value.v_uint32->empty()) return 0;
         uint32_t first_value = (*(field->value.v_uint32))[0];
         int32_t zig_zag_decoded = static_cast<int32_t>((first_value >> 1) ^ (-(first_value & 1)));
         return zig_zag_decoded;
@@ -288,6 +314,7 @@ namespace picoproto {
 
     int64_t Message::GetInt64(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_UINT64);
+        if (field == nullptr || field->value.v_uint64->empty()) return 0;
         uint64_t first_value = (*(field->value.v_uint64))[0];
         int64_t zig_zag_decoded = static_cast<int64_t>((first_value >> 1) ^ (-(first_value & 1)));
         return zig_zag_decoded;
@@ -295,21 +322,28 @@ namespace picoproto {
 
     uint32_t Message::GetUInt32(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_UINT32);
+        if (field == nullptr || field->value.v_uint32->empty()) return 0;
         uint32_t first_value = (*(field->value.v_uint32))[0];
         return first_value;
     }
 
     uint64_t Message::GetUInt64(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_UINT64);
+        if (field == nullptr || field->value.v_uint64->empty()) return 0;
         uint64_t first_value = (*(field->value.v_uint64))[0];
         return first_value;
     }
 
     int64_t Message::GetInt(int32_t number) {
         Field *field = GetField(number);
-        PP_CHECK(field) << "No field for " << number;
-        PP_CHECK((field->type == FIELD_UINT32) || (field->type == FIELD_UINT64))
-            << "For field " << number << " wanted integer type but found " << FieldTypeDebugString(field->type);
+        if (field == nullptr) {
+            PP_LOG(ERROR) << "No field for " << number;
+            return 0;
+        }
+        if (field->type != FIELD_UINT32 && field->type != FIELD_UINT64) {
+            PP_LOG(ERROR) << "For field " << number << " wanted integer type but found " << FieldTypeDebugString(field->type);
+            return 0;
+        }
         switch (field->type) {
             case FIELD_UINT32:
                 return GetInt32(number);
@@ -342,19 +376,23 @@ namespace picoproto {
 
     std::pair<uint8_t *, size_t> Message::GetBytes(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_BYTES);
+        if (field == nullptr || field->value.v_bytes->empty()) return {nullptr, 0};
         std::pair<uint8_t *, size_t> first_value = (*(field->value.v_bytes))[0];
         return first_value;
     }
 
     std::string Message::GetString(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_BYTES);
+        if (field == nullptr || field->value.v_bytes->empty()) return "";
         std::pair<uint8_t *, size_t> first_value = (*(field->value.v_bytes))[0];
+        if (first_value.first == nullptr) return "";
         std::string result(first_value.first, first_value.first + first_value.second);
         return result;
     }
 
     Message *Message::GetMessage(int32_t number) {
         Field *field = GetFieldAndCheckType(number, FIELD_BYTES);
+        if (field == nullptr || field->value.v_bytes->empty() || field->cached_messages->empty()) return nullptr;
         Message *cached_message = field->cached_messages->at(0);
         if (!cached_message) {
             std::pair<uint8_t *, size_t> first_value = (*(field->value.v_bytes))[0];
@@ -417,8 +455,9 @@ namespace picoproto {
             for (std::pair<uint8_t *, size_t> data_info: *field->value.v_bytes) {
                 uint8_t *current = data_info.first;
                 size_t remaining = data_info.second;
-                while (remaining > 0) {
-                    const uint64_t varint = ReadVarInt(&current, &remaining);
+                bool ok = true;
+                while (remaining > 0 && ok) {
+                    const uint64_t varint = ReadVarInt(&current, &remaining, &ok);
                     result.push_back(static_cast<int64_t>(varint));
                 }
             }
@@ -453,8 +492,9 @@ namespace picoproto {
             for (std::pair<uint8_t *, size_t> data_info: *field->value.v_bytes) {
                 uint8_t *current = data_info.first;
                 size_t remaining = data_info.second;
-                while (remaining > 0) {
-                    const uint64_t varint = ReadVarInt(&current, &remaining);
+                bool ok = true;
+                while (remaining > 0 && ok) {
+                    const uint64_t varint = ReadVarInt(&current, &remaining, &ok);
                     const uint32_t varint32 = static_cast<uint32_t>(varint & 0xffffffff);
                     result.push_back(bit_cast<float>(varint32));
                 }
@@ -480,8 +520,9 @@ namespace picoproto {
             for (std::pair<uint8_t *, size_t> data_info: *field->value.v_bytes) {
                 uint8_t *current = data_info.first;
                 size_t remaining = data_info.second;
-                while (remaining > 0) {
-                    const uint64_t varint = ReadVarInt(&current, &remaining);
+                bool ok = true;
+                while (remaining > 0 && ok) {
+                    const uint64_t varint = ReadVarInt(&current, &remaining, &ok);
                     result.push_back(bit_cast<double>(varint));
                 }
             }
@@ -533,6 +574,9 @@ namespace picoproto {
         if (field->type == FIELD_BYTES) {
             result.reserve(field->value.v_bytes->size());
             for (size_t i = 0; i < field->value.v_bytes->size(); ++i) {
+                if (field->cached_messages == nullptr || field->cached_messages->size() != field->value.v_bytes->size()) {
+                    continue;
+                }
                 Message *cached_message = field->cached_messages->at(i);
                 if (!cached_message) {
                     std::pair<uint8_t *, size_t> value = field->value.v_bytes->at(i);

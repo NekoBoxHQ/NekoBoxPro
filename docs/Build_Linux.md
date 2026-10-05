@@ -1,4 +1,4 @@
-在 Linux 下编译 Nekoray
+在 Linux 下编译 NekoBox
 
 ## git clone 源码
 

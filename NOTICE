@@ -1,0 +1,49 @@
+NOTICE
+======
+
+NekoBox 是基于 **MatsuriDayo/NekoRay** 的修改版（fork）。
+
+上游项目
+--------
+- NekoRay（GUI 客户端主体）
+  - 上游仓库：https://github.com/MatsuriDayo/NekoRay
+  - 上游许可证：GNU General Public License v3.0（GPLv3）
+  - 导入基线：上游 5.0.10（库根提交 6ce055c 一次性导入 321 文件 / 37,589 行）
+- Qv2ray（NekoRay 的上游）
+  - 上游仓库：https://github.com/Qv2ray/Qv2ray
+  - 上游许可证：GNU General Public License v3.0（GPLv3）
+- sing-box（代理内核，本组织 fork 为 NekoBoxHQ/sing-box）
+  - 上游仓库：https://github.com/SagerNet/sing-box
+  - 上游许可证：GNU General Public License v3.0 or later
+    Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
+  - 上游 LICENSE 附名称限制条款：未经事先同意，衍生作品不得使用
+    sing-box 名称或暗示与之关联
+
+派生关系
+--------
+本仓库以单个库根提交（6ce055c，2026-09-25）一次性导入上游
+NekoRay 5.0.10 全部代码，后续修改均为独立提交。由于仓库历史在
+导入时已 squash，上游作者的逐条提交历史无法追溯保留；本文件用于
+声明式合规（GPLv3 §5：保留原版权声明并显著标注已修改）。
+
+修改范围概述（与上游 NekoRay 5.0.10 的主要差异）
+------------------------------------------------
+- 内核单核化：仅使用 sing-box 单一内核，移除 Xray / v2ray 内核捆绑
+- 配置生成：db/ConfigBuilder.cpp 大幅改写（sing-box 配置生成）
+- 自动更新链路：内置自动更新（go/grpc_server/update.go、go/cmd/updater）
+- 构建与发布：GitHub Actions 全自动构建发布；依赖
+  NekoBoxHQ/libneko 与 NekoBoxHQ/sing-box（见 README「构建」）
+- 界面与品牌：名称、图标、README、Telegram 通知等品牌化调整
+
+兼容性保留
+----------
+- `nekoray://` URL scheme、`nekoray_auth` HTTP 头、`nekoray-` 版本前缀
+  为兼容上游导入格式与既有部署而保留，非品牌声明。
+
+第三方数据
+----------
+- geoip.db / geosite.db / geoip.dat / geosite.dat：**由 CI 从官方发布物下载固定版本并做 SHA256 校验**（不再随仓库分发），来源与许可证说明见 deployment/README.md
+
+授权说明
+--------
+本项目以 GPLv3 许可分发，详见 LICENSE。

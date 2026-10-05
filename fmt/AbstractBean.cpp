@@ -52,15 +52,24 @@ namespace NekoGui_fmt {
             return;
         }
 
+        std::shared_ptr<AbstractBean> self;
+        try {
+            self = shared_from_this(); // 延长生命周期到异步回调完成，避免 dangling this
+        } catch (const std::bad_weak_ptr &) {
+            // bean 未由 shared_ptr 托管（不应发生），跳过异步解析
+            onFinished();
+            return;
+        }
+
 #if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0) // TODO older QT
-        QHostInfo::lookupHost(serverAddress, QApplication::instance(), [=](const QHostInfo &host) {
+        QHostInfo::lookupHost(serverAddress, QApplication::instance(), [self, onFinished](const QHostInfo &host) {
             auto addr = host.addresses();
             if (!addr.isEmpty()) {
-                auto domain = serverAddress;
-                auto stream = GetStreamSettings(this);
+                auto domain = self->serverAddress;
+                auto stream = GetStreamSettings(self.get());
 
                 // replace serverAddress
-                serverAddress = addr.first().toString();
+                self->serverAddress = addr.first().toString();
 
                 // replace ws tls
                 if (stream != nullptr) {
@@ -74,6 +83,8 @@ namespace NekoGui_fmt {
             }
             onFinished();
         });
+#else
+        onFinished();
 #endif
     }
 } // namespace NekoGui_fmt

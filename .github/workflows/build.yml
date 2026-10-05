@@ -6,34 +6,78 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# 默认最小权限；发布所需的 contents: write 仅在具体 job 上提升
 permissions:
-  contents: write
+  contents: read
 
 env:
   NEKO_VERSION: 5.0.10
   SING_BOX_VERSION: v1.14.2
+  # TODO: NekoBoxHQ/libneko 与 NekoBoxHQ/sing-box 公开后，填入固定 commit SHA
+  #（为空时克隆对应仓库默认分支 HEAD）
+  LIB_NEKO_COMMIT: ''
+  SING_BOX_COMMIT: ''
+  # geo 数据固定版本（官方 release，均附带官方 sha256sum，CI 内强制校验）
+  GEOIP_DB_VER: 20260912
+  GEOSITE_DB_VER: 20260925013933
+  GEOIP_DAT_VER: 202609270006
+  GEOSITE_DAT_VER: 20260925234224
 
 jobs:
   build-windows:
     runs-on: windows-2022
+    permissions:
+      contents: write # 仅发布 GitHub Release 需要
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.22'
           cache: true
 
       - name: Clone kernel dependencies (libneko & sing-box fork)
         shell: bash
+        env:
+          NEKO_GH_TOKEN: ${{ secrets.NEKO_GH_TOKEN }}
         run: |
+          # token 通过 git url 重写注入，不出现在命令行参数中（ps 不可见）
+          git config --global url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf "https://github.com/NekoBoxHQ/"
           cd "$GITHUB_WORKSPACE/.."
-          git clone --depth 1 https://x-access-token:${{ secrets.NEKO_GH_TOKEN }}@github.com/NekoBoxHQ/libneko.git libneko
-          git clone --depth 1 https://x-access-token:${{ secrets.NEKO_GH_TOKEN }}@github.com/NekoBoxHQ/sing-box.git sing-box
+          git clone --depth 1 https://github.com/NekoBoxHQ/libneko.git libneko
+          git clone --depth 1 https://github.com/NekoBoxHQ/sing-box.git sing-box
+          if [ -n "${{ env.LIB_NEKO_COMMIT }}" ]; then
+            git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
+            git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
+          fi
+          if [ -n "${{ env.SING_BOX_COMMIT }}" ]; then
+            git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
+            git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
+          fi
+          git config --global --unset url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf
+
+      - name: Download geo data (pinned versions, sha256 verified)
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/deployment/windows64"
+          set -e
+          curl -fLso geoip.db "https://github.com/SagerNet/sing-geoip/releases/download/${{ env.GEOIP_DB_VER }}/geoip.db"
+          curl -fLso geosite.db "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db"
+          curl -fLso geoip.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat"
+          curl -fLso geosite.dat "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat"
+          curl -fsSL "https://github.com/SagerNet/sing-geoip/releases/download/${{ env.GEOIP_DB_VER }}/geoip.db.sha256sum" -o geoip.db.sha256sum
+          curl -fsSL "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db.sha256sum" -o geosite.db.sha256sum
+          curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
+          curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
+          sha256sum -c geoip.db.sha256sum --ignore-missing
+          sha256sum -c geosite.db.sha256sum --ignore-missing
+          sha256sum -c geoip.dat.sha256sum --ignore-missing
+          sha256sum -c geosite.dat.sha256sum --ignore-missing
+          rm -f *.sha256sum
 
       - name: Build nekobox_core
         shell: bash
@@ -57,7 +101,7 @@ jobs:
           go build -o "$GITHUB_WORKSPACE/deployment/windows64/updater.exe" .
 
       - name: MSVC x64 environment
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
         with:
           arch: x64
 
@@ -75,7 +119,7 @@ jobs:
           echo "Qt6_DIR=$QTP/lib/cmake/Qt6" >> "$GITHUB_ENV"
 
       - name: Cache deps
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: $GITHUB_WORKSPACE/deps/built
           key: neko-deps-${{ runner.os }}-v2
@@ -100,7 +144,6 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BLACKBOX_TESTS=OFF
           cmake --build "$DEPS/build-zxing" -j4 --target install
           echo "DEPS_ROOT=$DEPS/built" >> "$GITHUB_ENV"
-
 
       - name: Configure & build GUI (nekobox.exe)
         shell: bash
@@ -127,17 +170,37 @@ jobs:
           rm -rf config stderr.txt nekobox.png
           "C:/Program Files/7-Zip/7z.exe" a -tzip -mx5 "$GITHUB_WORKSPACE/NekoBox-Windows64.zip" ./*
 
+      - name: Sign release asset (minisign)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          NEKO_MINISIGN_SECRET_KEY: ${{ secrets.NEKO_MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$NEKO_MINISIGN_SECRET_KEY" ]; then
+            echo "::warning::NEKO_MINISIGN_SECRET_KEY 未配置，跳过签名。updater 将对无签名更新拒绝执行（fail-closed）。"
+            exit 0
+          fi
+          choco install -y minisign >/dev/null 2>&1 || true
+          export PATH="$PATH:/c/ProgramData/chocolatey/bin"
+          printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
+          minisign -S -m NekoBox-Windows64.zip -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Windows64.zip.minisig
+          rm -f /tmp/nekobox.key
+
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nekoray-windows64
-          path: NekoBox-Windows64.zip
+          name: nekobox-windows64
+          path: |
+            NekoBox-Windows64.zip
+            NekoBox-Windows64.zip.minisig
 
       - name: Publish GitHub Release (Windows)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: NekoBox-Windows64.zip
+          files: |
+            NekoBox-Windows64.zip
+            NekoBox-Windows64.zip.minisig
           body: |
             **NekoBox v${{ env.NEKO_VERSION }}** 已发布 / Released.
 
@@ -164,24 +227,59 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write # 仅发布 GitHub Release 需要
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.22'
           cache: true
 
       - name: Clone kernel dependencies (libneko & sing-box fork)
         shell: bash
+        env:
+          NEKO_GH_TOKEN: ${{ secrets.NEKO_GH_TOKEN }}
         run: |
+          # token 通过 git url 重写注入，不出现在命令行参数中（ps 不可见）
+          git config --global url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf "https://github.com/NekoBoxHQ/"
           cd "$GITHUB_WORKSPACE/.."
-          git clone --depth 1 https://x-access-token:${{ secrets.NEKO_GH_TOKEN }}@github.com/NekoBoxHQ/libneko.git libneko
-          git clone --depth 1 https://x-access-token:${{ secrets.NEKO_GH_TOKEN }}@github.com/NekoBoxHQ/sing-box.git sing-box
+          git clone --depth 1 https://github.com/NekoBoxHQ/libneko.git libneko
+          git clone --depth 1 https://github.com/NekoBoxHQ/sing-box.git sing-box
+          if [ -n "${{ env.LIB_NEKO_COMMIT }}" ]; then
+            git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
+            git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
+          fi
+          if [ -n "${{ env.SING_BOX_COMMIT }}" ]; then
+            git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
+            git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
+          fi
+          git config --global --unset url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf
+
+      - name: Download geo data (pinned versions, sha256 verified)
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/deployment/linux64"
+          cd "$GITHUB_WORKSPACE/deployment/linux64"
+          set -e
+          curl -fLso geoip.db "https://github.com/SagerNet/sing-geoip/releases/download/${{ env.GEOIP_DB_VER }}/geoip.db"
+          curl -fLso geosite.db "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db"
+          curl -fLso geoip.dat "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat"
+          curl -fLso geosite.dat "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat"
+          curl -fsSL "https://github.com/SagerNet/sing-geoip/releases/download/${{ env.GEOIP_DB_VER }}/geoip.db.sha256sum" -o geoip.db.sha256sum
+          curl -fsSL "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db.sha256sum" -o geosite.db.sha256sum
+          curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
+          curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
+          sha256sum -c geoip.db.sha256sum --ignore-missing
+          sha256sum -c geosite.db.sha256sum --ignore-missing
+          sha256sum -c geoip.dat.sha256sum --ignore-missing
+          sha256sum -c geosite.dat.sha256sum --ignore-missing
+          rm -f *.sha256sum
 
       - name: Build nekobox_core
         shell: bash
@@ -205,19 +303,19 @@ jobs:
           go build -o "$GITHUB_WORKSPACE/deployment/linux64/updater" .
 
       - name: Setup Python 3.12 (for aqtinstall)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
       - name: Install Qt 6.7.2 (Linux gcc_64)
-        uses: jurplel/install-qt-action@v4
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
         with:
           version: '6.7.2'
           arch: 'linux_gcc_64'
           cache: false
 
       - name: Cache deps
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: $GITHUB_WORKSPACE/deps/built
           key: neko-deps-${{ runner.os }}-v2
@@ -269,7 +367,6 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/deployment/linux64"
-          cp ../windows64/geoip.dat ../windows64/geoip.db ../windows64/geosite.dat ../windows64/geosite.db .
           cp "$GITHUB_WORKSPACE/res/public/nekobox.png" .
 
       - name: Build AppImage
@@ -296,18 +393,38 @@ jobs:
           mv linux64 nekobox
           tar czf "$GITHUB_WORKSPACE/NekoBox-Linux64.tar.gz" nekobox
 
+      - name: Sign release assets (minisign)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          NEKO_MINISIGN_SECRET_KEY: ${{ secrets.NEKO_MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$NEKO_MINISIGN_SECRET_KEY" ]; then
+            echo "::warning::NEKO_MINISIGN_SECRET_KEY 未配置，跳过签名。updater 将对无签名更新拒绝执行（fail-closed）。"
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
+          minisign -S -m NekoBox-Linux-x64.AppImage -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Linux-x64.AppImage.minisig
+          minisign -S -m NekoBox-Linux64.tar.gz -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Linux64.tar.gz.minisig
+          rm -f /tmp/nekobox.key
+
       - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: nekoray-linux64
+          name: nekobox-linux64
           path: |
             NekoBox-Linux-x64.AppImage
+            NekoBox-Linux-x64.AppImage.minisig
             NekoBox-Linux64.tar.gz
+            NekoBox-Linux64.tar.gz.minisig
 
       - name: Publish GitHub Release (Linux)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             NekoBox-Linux-x64.AppImage
+            NekoBox-Linux-x64.AppImage.minisig
             NekoBox-Linux64.tar.gz
+            NekoBox-Linux64.tar.gz.minisig

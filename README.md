@@ -1,5 +1,7 @@
 # NekoBox
 
+> 基于 [MatsuriDayo/NekoRay](https://github.com/MatsuriDayo/NekoRay)（GPLv3，上游衍生自 Qv2ray）的修改版，与原版的差异见 [NOTICE](./NOTICE)。仅使用 sing-box 单一内核。
+
 A modern sing-box GUI client. 单内核 · 稳定优先 · 最小复杂度
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -11,7 +13,7 @@ A modern sing-box GUI client. 单内核 · 稳定优先 · 最小复杂度
 
 ## 简介
 
-NekoBox 是一款独立维护的现代 sing-box GUI 客户端，仅使用 sing-box 单一内核，稳定优先、面向长期维护。
+NekoBox 是一款基于 NekoRay 修改的现代 sing-box GUI 客户端，仅使用 sing-box 单一内核，稳定优先、面向长期维护。
 
 ## 特性
 
@@ -63,9 +65,24 @@ Linux 运行教程见 [docs/Run_Linux.md](docs/Run_Linux.md)。
 git clone https://github.com/NekoBoxHQ/NekoBox
 ```
 
+构建依赖（GPLv3）：
+- `NekoBoxHQ/libneko`（对应公开上游 https://github.com/MatsuriDayo/libneko）
+- `NekoBoxHQ/sing-box`（对应公开上游 https://github.com/SagerNet/sing-box）
+
 推送 tag 后由 GitHub Actions 自动构建并发布。
 
 技术文档见 [docs](https://github.com/NekoBoxHQ/NekoBox/tree/main/docs)。
+
+### 发布签名（minisign）
+
+客户端内置自动更新会**强制校验发布包签名**：updater 在解压前用编译进二进制的公钥验签，公钥未配置或签名缺失时拒绝更新（fail-closed）。
+
+首次启用签名发布：
+1. 生成密钥对：`minisign -G -s nekobox.key -p nekobox.pub`
+2. 将**私钥**内容加入 GitHub Secrets：`NEKO_MINISIGN_SECRET_KEY`
+3. 将 `nekobox.pub` 内容替换到 `go/cmd/updater/updater.go` 的 `minisignPublicKey` 常量并提交
+
+CI 在 tag 发布时对 `NekoBox-Windows64.zip`、`NekoBox-Linux64.tar.gz`、`NekoBox-Linux-x64.AppImage` 分别生成 `<资产>.minisig` 并随 release 上传。
 
 ## 讨论群组
 

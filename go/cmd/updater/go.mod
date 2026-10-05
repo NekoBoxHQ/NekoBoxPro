@@ -1,11 +1,10 @@
 module updater
 
-go 1.18
+go 1.25.0
 
-require github.com/codeclysm/extract v2.2.0+incompatible
+require github.com/jedisct1/go-minisign v0.0.0-20260527172527-a09352b57a22
 
 require (
-	github.com/h2non/filetype v1.1.3 // indirect
-	github.com/juju/errors v0.0.0-20220331221717-b38fca44723b // indirect
-	github.com/stretchr/testify v1.7.1 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )

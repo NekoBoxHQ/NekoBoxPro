@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include <QJsonObject>
 #include <QJsonArray>
 
@@ -24,7 +26,9 @@ namespace NekoGui_fmt {
         QString config_export;
     };
 
-    class AbstractBean : public JsonStore {
+    // enable_shared_from_this：供异步回调（如 ResolveDomainToIP）延长 bean
+    // 生命周期，避免回调触发时对象已析构（dangling this）。
+    class AbstractBean : public JsonStore, public std::enable_shared_from_this<AbstractBean> {
     public:
         int version;
 
@@ -36,6 +40,8 @@ namespace NekoGui_fmt {
         QString custom_outbound = "";
 
         explicit AbstractBean(int version);
+
+        virtual ~AbstractBean() = default;
 
         //
 

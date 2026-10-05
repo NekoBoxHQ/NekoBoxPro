@@ -9,7 +9,7 @@ generate_product_version(
         BUNDLE "nekobox"
         VERSION_MAJOR 5
         VERSION_MINOR 0
-        VERSION_PATCH 0
+        VERSION_PATCH 10
         COMPANY_NAME "nekobox"
         COMPANY_COPYRIGHT "nekobox"
         FILE_DESCRIPTION "nekobox"

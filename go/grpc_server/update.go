@@ -166,24 +166,63 @@ func (s *BaseServer) Update(ctx context.Context, in *gen.UpdateReq) (*gen.Update
 		}
 		defer resp.Body.Close()
 
+		if resp.StatusCode != http.StatusOK {
+			ret.Error = fmt.Sprintf("更新包下载失败：HTTP %d，已中止更新", resp.StatusCode)
+			return ret, nil
+		}
+
 		exePath, err := os.Executable()
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		f, err := os.OpenFile(filepath.Join(filepath.Dir(exePath), "nekobox_update.zip"), os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+
+		// 按实际资产格式命名更新包，供 updater 识别（zip / tar.gz）
+		updateName := "nekobox_update.zip"
+		if strings.HasSuffix(update_download_url, ".tar.gz") {
+			updateName = "nekobox_update.tar.gz"
+		}
+		updatePath := filepath.Join(filepath.Dir(exePath), updateName)
+
+		f, err := os.OpenFile(updatePath, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		defer f.Close()
 
 		_, err = io.Copy(f, resp.Body)
+		f.Close()
 		if err != nil {
 			ret.Error = err.Error()
 			return ret, nil
 		}
-		f.Sync()
+
+		// 下载配套 minisign 签名文件（<更新包>.minisig），供 updater 解压前验签
+		sigReq, _ := http.NewRequestWithContext(ctx, "GET", update_download_url+".minisig", nil)
+		sigResp, err := client.Do(sigReq)
+		if err != nil {
+			ret.Error = "更新包签名文件下载失败：" + err.Error() + "（已中止更新，拒绝无签名更新）"
+			return ret, nil
+		}
+		defer sigResp.Body.Close()
+
+		if sigResp.StatusCode != http.StatusOK {
+			ret.Error = fmt.Sprintf("更新包签名文件下载失败：HTTP %d（已中止更新，拒绝无签名更新）", sigResp.StatusCode)
+			return ret, nil
+		}
+
+		sf, err := os.OpenFile(updatePath+".minisig", os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
+		if err != nil {
+			ret.Error = err.Error()
+			return ret, nil
+		}
+
+		_, err = io.Copy(sf, sigResp.Body)
+		sf.Close()
+		if err != nil {
+			ret.Error = err.Error()
+			return ret, nil
+		}
 	}
 
 	return ret, nil
