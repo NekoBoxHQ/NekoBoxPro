@@ -13,10 +13,9 @@ permissions:
 env:
   NEKO_VERSION: 5.0.10
   SING_BOX_VERSION: v1.14.2
-  # TODO: NekoBoxHQ/libneko 与 NekoBoxHQ/sing-box 公开后，填入固定 commit SHA
-  #（为空时克隆对应仓库默认分支 HEAD）
-  LIB_NEKO_COMMIT: ''
-  SING_BOX_COMMIT: ''
+  # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
+  LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61
+  SING_BOX_COMMIT: 05366eaf8783c0fe9dc5ee75fb6035745bbf8a8e
   # geo 数据固定版本（官方 release，均附带官方 sha256sum，CI 内强制校验）
   GEOIP_DB_VER: 20260912
   GEOSITE_DB_VER: 20260925013933
@@ -42,23 +41,15 @@ jobs:
 
       - name: Clone kernel dependencies (libneko & sing-box fork)
         shell: bash
-        env:
-          NEKO_GH_TOKEN: ${{ secrets.NEKO_GH_TOKEN }}
         run: |
-          # token 通过 git url 重写注入，不出现在命令行参数中（ps 不可见）
-          git config --global url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf "https://github.com/NekoBoxHQ/"
+          # 依赖 fork 已公开（GPLv3 源码可得），无需凭据，按固定 commit 克隆
           cd "$GITHUB_WORKSPACE/.."
           git clone --depth 1 https://github.com/NekoBoxHQ/libneko.git libneko
+          git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
+          git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
           git clone --depth 1 https://github.com/NekoBoxHQ/sing-box.git sing-box
-          if [ -n "${{ env.LIB_NEKO_COMMIT }}" ]; then
-            git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
-            git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
-          fi
-          if [ -n "${{ env.SING_BOX_COMMIT }}" ]; then
-            git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
-            git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
-          fi
-          git config --global --unset url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf
+          git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
+          git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
 
       - name: Download geo data (pinned versions, sha256 verified)
         shell: bash
@@ -243,23 +234,15 @@ jobs:
 
       - name: Clone kernel dependencies (libneko & sing-box fork)
         shell: bash
-        env:
-          NEKO_GH_TOKEN: ${{ secrets.NEKO_GH_TOKEN }}
         run: |
-          # token 通过 git url 重写注入，不出现在命令行参数中（ps 不可见）
-          git config --global url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf "https://github.com/NekoBoxHQ/"
+          # 依赖 fork 已公开（GPLv3 源码可得），无需凭据，按固定 commit 克隆
           cd "$GITHUB_WORKSPACE/.."
           git clone --depth 1 https://github.com/NekoBoxHQ/libneko.git libneko
+          git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
+          git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
           git clone --depth 1 https://github.com/NekoBoxHQ/sing-box.git sing-box
-          if [ -n "${{ env.LIB_NEKO_COMMIT }}" ]; then
-            git -C libneko fetch --depth 1 origin "${{ env.LIB_NEKO_COMMIT }}"
-            git -C libneko checkout "${{ env.LIB_NEKO_COMMIT }}"
-          fi
-          if [ -n "${{ env.SING_BOX_COMMIT }}" ]; then
-            git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
-            git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
-          fi
-          git config --global --unset url."https://x-access-token:${NEKO_GH_TOKEN}@github.com/NekoBoxHQ/".insteadOf
+          git -C sing-box fetch --depth 1 origin "${{ env.SING_BOX_COMMIT }}"
+          git -C sing-box checkout "${{ env.SING_BOX_COMMIT }}"
 
       - name: Download geo data (pinned versions, sha256 verified)
         shell: bash

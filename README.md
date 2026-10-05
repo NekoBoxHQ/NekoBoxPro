@@ -66,8 +66,10 @@ git clone https://github.com/NekoBoxHQ/NekoBox
 ```
 
 构建依赖（GPLv3）：
-- `NekoBoxHQ/libneko`（对应公开上游 https://github.com/MatsuriDayo/libneko）
-- `NekoBoxHQ/sing-box`（对应公开上游 https://github.com/SagerNet/sing-box）
+- `NekoBoxHQ/libneko`（公开 fork，对应公开上游 https://github.com/MatsuriDayo/libneko）
+- `NekoBoxHQ/sing-box`（公开 fork，对应公开上游 https://github.com/SagerNet/sing-box）
+
+CI 按固定 commit 克隆上述 fork（可复现构建）；两者的源码随构建产物一起可得。
 
 推送 tag 后由 GitHub Actions 自动构建并发布。
 
