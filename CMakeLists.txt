@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(nekobox VERSION 5.0.10 LANGUAGES CXX)
+project(nekobox VERSION 5.0.11 LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 

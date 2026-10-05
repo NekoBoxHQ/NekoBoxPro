@@ -5,14 +5,14 @@ include(cmake/windows/generate_product_version.cmake)
 generate_product_version(
         QV2RAY_RC
         ICON "${CMAKE_SOURCE_DIR}/res/nekobox.ico"
-        NAME "nekobox"
-        BUNDLE "nekobox"
+        NAME "NekoBoxPro"
+        BUNDLE "NekoBoxPro"
         VERSION_MAJOR 5
         VERSION_MINOR 0
-        VERSION_PATCH 10
-        COMPANY_NAME "nekobox"
-        COMPANY_COPYRIGHT "nekobox"
-        FILE_DESCRIPTION "nekobox"
+        VERSION_PATCH 11
+        COMPANY_NAME "NekoBoxPro"
+        COMPANY_COPYRIGHT "NekoBoxPro"
+        FILE_DESCRIPTION "NekoBoxPro"
 )
 add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
 set(GUI_TYPE WIN32)
