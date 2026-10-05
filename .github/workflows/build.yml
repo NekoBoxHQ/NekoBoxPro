@@ -64,6 +64,7 @@ jobs:
           curl -fsSL "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db.sha256sum" -o geosite.db.sha256sum
           curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
           curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
+          sed -i 's/dlc\.dat/geosite.dat/' geosite.dat.sha256sum
           sha256sum -c geoip.db.sha256sum --ignore-missing
           sha256sum -c geosite.db.sha256sum --ignore-missing
           sha256sum -c geoip.dat.sha256sum --ignore-missing
@@ -258,6 +259,7 @@ jobs:
           curl -fsSL "https://github.com/SagerNet/sing-geosite/releases/download/${{ env.GEOSITE_DB_VER }}/geosite.db.sha256sum" -o geosite.db.sha256sum
           curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
           curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
+          sed -i 's/dlc\.dat/geosite.dat/' geosite.dat.sha256sum
           sha256sum -c geoip.db.sha256sum --ignore-missing
           sha256sum -c geosite.db.sha256sum --ignore-missing
           sha256sum -c geoip.dat.sha256sum --ignore-missing
