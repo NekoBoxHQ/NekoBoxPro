@@ -2,6 +2,8 @@ name: Build Windows & Linux & Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -66,10 +68,28 @@ jobs:
           curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
           curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
           sed -i 's/dlc\.dat/geosite.dat/' geosite.dat.sha256sum
-          sha256sum -c geoip.db.sha256sum --ignore-missing
-          sha256sum -c geosite.db.sha256sum --ignore-missing
-          sha256sum -c geoip.dat.sha256sum --ignore-missing
-          sha256sum -c geosite.dat.sha256sum --ignore-missing
+          # 显式比对摘要，**不使用** sha256sum -c --ignore-missing：
+          # --ignore-missing 会让"清单里文件名对不上"的条目被静默忽略而非失败，
+          # 一旦上游再次改产物名（本步骤已依赖一次 sed 改名 hack），
+          # 强制的 SHA256 校验就会被绕过而构建照常继续。
+          verify_geo_sha() { # <本地文件> <sha256sum 文件> <清单中的文件名>
+            local file="$1" sumfile="$2" name="$3" want got
+            want=$(awk -v n="$name" '$2==n || $2=="*"n {print $1; exit}' "$sumfile")
+            if [ -z "$want" ]; then
+              echo "::error::$sumfile 中未找到 $name 条目（疑似上游改名，需人工确认后再更新工作流）"
+              exit 1
+            fi
+            got=$(sha256sum "$file" | awk '{print $1}')
+            if [ "$want" != "$got" ]; then
+              echo "::error::$file SHA256 校验失败：期望 $want 实际 $got"
+              exit 1
+            fi
+            echo "verified: $file"
+          }
+          verify_geo_sha geoip.db    geoip.db.sha256sum    geoip.db
+          verify_geo_sha geosite.db  geosite.db.sha256sum  geosite.db
+          verify_geo_sha geoip.dat   geoip.dat.sha256sum   geoip.dat
+          verify_geo_sha geosite.dat geosite.dat.sha256sum geosite.dat
           rm -f *.sha256sum
 
       - name: Build nekobox_core
@@ -101,7 +121,8 @@ jobs:
       - name: Install Qt 6.8.3 (MSVC 2022)
         shell: bash
         run: |
-          python -m pip install --quiet --upgrade aqtinstall
+          # 固定版本：aqtinstall 未固定时会随时拉取新版，属于 CI 供应链的可变输入
+          python -m pip install --quiet "aqtinstall==3.3.0"
           aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 \
             --outputdir "$GITHUB_WORKSPACE/qt"
           QTP=$(find "$GITHUB_WORKSPACE/qt" -name Qt6Config.cmake -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -1 | sed 's|/lib/cmake/Qt6/Qt6Config.cmake||')
@@ -124,15 +145,19 @@ jobs:
           DEPS="$GITHUB_WORKSPACE/deps"
           mkdir -p "$DEPS/src" "$DEPS/built"
           git clone --depth 1 -b v21.12 https://github.com/protocolbuffers/protobuf.git "$DEPS/src/protobuf"
+          # tag 可被上游移动，断言实际检出的 commit，防止静默换到被改写的 tag
+          [ "$(git -C "$DEPS/src/protobuf" rev-parse HEAD)" = "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c" ] || { echo "::error::protobuf v21.12 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/protobuf" -B "$DEPS/build-protobuf" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -Dprotobuf_MSVC_STATIC_RUNTIME=OFF -Dprotobuf_BUILD_TESTS=OFF \
             -Dprotobuf_BUILD_SHARED_LIBS=OFF -DBUILD_SHARED_LIBS=OFF
           cmake --build "$DEPS/build-protobuf" -j2 --target install
           git clone --depth 1 -b yaml-cpp-0.7.0 https://github.com/jbeder/yaml-cpp.git "$DEPS/src/yaml-cpp"
+          [ "$(git -C "$DEPS/src/yaml-cpp" rev-parse HEAD)" = "0579ae3d976091d7d664aa9d2527e0d0cff25763" ] || { echo "::error::yaml-cpp 0.7.0 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/yaml-cpp" -B "$DEPS/build-yaml" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DYAML_CPP_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF
           cmake --build "$DEPS/build-yaml" -j4 --target install
           git clone --depth 1 -b v2.0.0 https://github.com/nu-book/zxing-cpp.git "$DEPS/src/zxing-cpp"
+          [ "$(git -C "$DEPS/src/zxing-cpp" rev-parse HEAD)" = "bdb857efae30f5f2abfcf3d626bf1156dc055bae" ] || { echo "::error::zxing-cpp v2.0.0 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/zxing-cpp" -B "$DEPS/build-zxing" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BLACKBOX_TESTS=OFF
           cmake --build "$DEPS/build-zxing" -j4 --target install
@@ -170,9 +195,13 @@ jobs:
           NEKO_MINISIGN_SECRET_KEY: ${{ secrets.NEKO_MINISIGN_SECRET_KEY }}
         run: |
           if [ -z "$NEKO_MINISIGN_SECRET_KEY" ]; then
-            echo "::warning::NEKO_MINISIGN_SECRET_KEY 未配置，跳过签名。updater 将对无签名更新拒绝执行（fail-closed）。"
-            exit 0
+            echo "::error::NEKO_MINISIGN_SECRET_KEY 未配置，禁止发布未签名资产。"
+            echo "::error::updater 对无签名更新一律拒绝（fail-closed），发布未签名资产等于发布一个客户端无法自动升级的版本。"
+            exit 1
           fi
+          # 私钥是更新信任锚，收紧权限并在任何退出路径（含失败中断）清理
+          umask 077
+          trap 'rm -f /tmp/nekobox.key' EXIT
           printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
           cd "$GITHUB_WORKSPACE/go/cmd/signasset"
           go build -o "$GITHUB_WORKSPACE/signasset-bin" .
@@ -262,10 +291,28 @@ jobs:
           curl -fsSL "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/${{ env.GEOIP_DAT_VER }}/geoip.dat.sha256sum" -o geoip.dat.sha256sum
           curl -fsSL "https://github.com/v2fly/domain-list-community/releases/download/${{ env.GEOSITE_DAT_VER }}/dlc.dat.sha256sum" -o geosite.dat.sha256sum
           sed -i 's/dlc\.dat/geosite.dat/' geosite.dat.sha256sum
-          sha256sum -c geoip.db.sha256sum --ignore-missing
-          sha256sum -c geosite.db.sha256sum --ignore-missing
-          sha256sum -c geoip.dat.sha256sum --ignore-missing
-          sha256sum -c geosite.dat.sha256sum --ignore-missing
+          # 显式比对摘要，**不使用** sha256sum -c --ignore-missing：
+          # --ignore-missing 会让"清单里文件名对不上"的条目被静默忽略而非失败，
+          # 一旦上游再次改产物名（本步骤已依赖一次 sed 改名 hack），
+          # 强制的 SHA256 校验就会被绕过而构建照常继续。
+          verify_geo_sha() { # <本地文件> <sha256sum 文件> <清单中的文件名>
+            local file="$1" sumfile="$2" name="$3" want got
+            want=$(awk -v n="$name" '$2==n || $2=="*"n {print $1; exit}' "$sumfile")
+            if [ -z "$want" ]; then
+              echo "::error::$sumfile 中未找到 $name 条目（疑似上游改名，需人工确认后再更新工作流）"
+              exit 1
+            fi
+            got=$(sha256sum "$file" | awk '{print $1}')
+            if [ "$want" != "$got" ]; then
+              echo "::error::$file SHA256 校验失败：期望 $want 实际 $got"
+              exit 1
+            fi
+            echo "verified: $file"
+          }
+          verify_geo_sha geoip.db    geoip.db.sha256sum    geoip.db
+          verify_geo_sha geosite.db  geosite.db.sha256sum  geosite.db
+          verify_geo_sha geoip.dat   geoip.dat.sha256sum   geoip.dat
+          verify_geo_sha geosite.dat geosite.dat.sha256sum geosite.dat
           rm -f *.sha256sum
 
       - name: Build nekobox_core
@@ -297,7 +344,8 @@ jobs:
       - name: Install Qt 6.7.2 (Linux gcc_64)
         shell: bash
         run: |
-          python -m pip install --quiet --upgrade aqtinstall
+          # 固定版本：aqtinstall 未固定时会随时拉取新版，属于 CI 供应链的可变输入
+          python -m pip install --quiet "aqtinstall==3.3.0"
           aqt install-qt linux desktop 6.7.2 linux_gcc_64 --outputdir "$GITHUB_WORKSPACE/qt"
           QTP=$(find "$GITHUB_WORKSPACE/qt" -name Qt6Config.cmake -path "*/lib/cmake/Qt6/Qt6Config.cmake" | head -1 | sed 's|/lib/cmake/Qt6/Qt6Config.cmake||')
           if [ -z "$QTP" ]; then echo "QT6 NOT DETECTED, layout:"; find "$GITHUB_WORKSPACE/qt" -maxdepth 3 -type d 2>/dev/null | head -20; exit 1; fi
@@ -318,15 +366,19 @@ jobs:
           DEPS="$GITHUB_WORKSPACE/deps"
           mkdir -p "$DEPS/src" "$DEPS/built"
           git clone --depth 1 -b v21.12 https://github.com/protocolbuffers/protobuf.git "$DEPS/src/protobuf"
+          # tag 可被上游移动，断言实际检出的 commit，防止静默换到被改写的 tag
+          [ "$(git -C "$DEPS/src/protobuf" rev-parse HEAD)" = "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c" ] || { echo "::error::protobuf v21.12 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/protobuf" -B "$DEPS/build-protobuf" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -Dprotobuf_MSVC_STATIC_RUNTIME=OFF -Dprotobuf_BUILD_TESTS=OFF \
             -Dprotobuf_BUILD_SHARED_LIBS=OFF -DBUILD_SHARED_LIBS=OFF
           cmake --build "$DEPS/build-protobuf" -j2 --target install
           git clone --depth 1 -b yaml-cpp-0.7.0 https://github.com/jbeder/yaml-cpp.git "$DEPS/src/yaml-cpp"
+          [ "$(git -C "$DEPS/src/yaml-cpp" rev-parse HEAD)" = "0579ae3d976091d7d664aa9d2527e0d0cff25763" ] || { echo "::error::yaml-cpp 0.7.0 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/yaml-cpp" -B "$DEPS/build-yaml" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DYAML_CPP_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF
           cmake --build "$DEPS/build-yaml" -j4 --target install
           git clone --depth 1 -b v2.0.0 https://github.com/nu-book/zxing-cpp.git "$DEPS/src/zxing-cpp"
+          [ "$(git -C "$DEPS/src/zxing-cpp" rev-parse HEAD)" = "bdb857efae30f5f2abfcf3d626bf1156dc055bae" ] || { echo "::error::zxing-cpp v2.0.0 指向非预期 commit，拒绝继续"; exit 1; }
           cmake -GNinja -S "$DEPS/src/zxing-cpp" -B "$DEPS/build-zxing" \
             -DCMAKE_INSTALL_PREFIX="$DEPS/built" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BLACKBOX_TESTS=OFF
           cmake --build "$DEPS/build-zxing" -j4 --target install
@@ -365,8 +417,14 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           export PATH="$Qt6_DIR/../../../bin:$PATH"
           export QMAKE="$Qt6_DIR/../../../bin/qmake"
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          # 固定发布版本 + SHA256 校验。原实现取 `continuous` tag —— 那是可变目标，
+          # 上游任何一次推送都会让 CI 下载并执行新的二进制，构成直接的 CI 供应链 RCE 面。
+          LD_VER="1-alpha-20251107-1"
+          LDQT_VER="1-alpha-20250213-1"
+          wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/$LD_VER/linuxdeploy-x86_64.AppImage"
+          wget -q "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/$LDQT_VER/linuxdeploy-plugin-qt-x86_64.AppImage"
+          echo "c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d  linuxdeploy-x86_64.AppImage" | sha256sum -c -
+          echo "15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724  linuxdeploy-plugin-qt-x86_64.AppImage" | sha256sum -c -
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
           mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           printf '[Desktop Entry]\nType=Application\nName=NekoBoxPro\nComment=NekoBoxPro proxy client\nExec=nekoboxpro\nIcon=nekobox\nCategories=Network;Qt;\nTerminal=false\n' > AppDir/usr/share/applications/nekobox.desktop
@@ -392,9 +450,13 @@ jobs:
           NEKO_MINISIGN_SECRET_KEY: ${{ secrets.NEKO_MINISIGN_SECRET_KEY }}
         run: |
           if [ -z "$NEKO_MINISIGN_SECRET_KEY" ]; then
-            echo "::warning::NEKO_MINISIGN_SECRET_KEY 未配置，跳过签名。updater 将对无签名更新拒绝执行（fail-closed）。"
-            exit 0
+            echo "::error::NEKO_MINISIGN_SECRET_KEY 未配置，禁止发布未签名资产。"
+            echo "::error::updater 对无签名更新一律拒绝（fail-closed），发布未签名资产等于发布一个客户端无法自动升级的版本。"
+            exit 1
           fi
+          # 私钥是更新信任锚，收紧权限并在任何退出路径（含失败中断）清理
+          umask 077
+          trap 'rm -f /tmp/nekobox.key' EXIT
           printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
           cd "$GITHUB_WORKSPACE/go/cmd/signasset"
           go build -o "$GITHUB_WORKSPACE/signasset-bin" .

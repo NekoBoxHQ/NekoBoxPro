@@ -3,7 +3,7 @@
 #include "3rdparty/base64.h"
 #include "3rdparty/QThreadCreateThread.hpp"
 
-#include <random>
+#include <QRandomGenerator>
 
 #include <QApplication>
 #include <QUrlQuery>
@@ -70,27 +70,26 @@ QString GetQueryValue(const QUrlQuery &q, const QString &key, const QString &def
     return a;
 }
 
+// 二者用于生成与内核通信的认证 token（core_token）等安全相关值。
+// 原实现用 std::mt19937，且整个梅森旋转状态仅由单次 std::random_device()（约 32 位熵）播种：
+// 输出空间远小于字面长度暗示的强度，持有本地回环访问权限的进程可枚举/爆破。
+// 改用操作系统熵源（QRandomGenerator::system()，Linux 下为 getrandom / /dev/urandom）。
 QString GetRandomString(int randomStringLength) {
-    std::random_device rd;
-    std::mt19937 mt(rd());
-
     const QString possibleCharacters("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
-
-    std::uniform_int_distribution<int> dist(0, possibleCharacters.length() - 1);
+    const int charCount = possibleCharacters.length();
 
     QString randomString;
+    randomString.reserve(randomStringLength);
     for (int i = 0; i < randomStringLength; ++i) {
-        QChar nextChar = possibleCharacters.at(dist(mt));
-        randomString.append(nextChar);
+        const quint32 idx = QRandomGenerator::system()->bounded(quint32(charCount));
+        randomString.append(possibleCharacters.at(int(idx)));
     }
     return randomString;
 }
 
 quint64 GetRandomUint64() {
-    std::random_device rd;
-    std::mt19937 mt(rd());
-    std::uniform_int_distribution<quint64> dist;
-    return dist(mt);
+    return (quint64(QRandomGenerator::system()->generate()) << 32) |
+           quint64(QRandomGenerator::system()->generate());
 }
 
 // QString >> QJson

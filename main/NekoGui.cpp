@@ -192,6 +192,10 @@ namespace NekoGui_ConfigItem {
         QFile file;
         file.setFileName(fn);
         file.open(QIODevice::ReadWrite | QIODevice::Truncate);
+        // 这些文件保存订阅地址、节点密码/UUID/PSK、入站密码、Clash API secret。
+        // 默认权限为 0644（同机其他用户可读），显式收紧为 0600（仅属主可读写）。
+        // Windows 上 setPermissions 为 no-op，不影响功能。
+        file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         file.write(save_content);
         file.close();
 

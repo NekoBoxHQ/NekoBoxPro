@@ -1,4 +1,6 @@
 #!/bin/bash
+# ⚠️ LEGACY（Qt5 时代）—— 当前发行走 CI 的 linuxdeploy AppImage 路径（见 .github/workflows/build.yml）。
+# 本脚本仍从上游作者的仓库下载 Qt 5.12.8 运行时，且在中途即 exit，对 Qt6 构建已失效，仅作历史保留。
 set -e
 
 source libs/env_deploy.sh
@@ -7,7 +9,8 @@ rm -rf $DEST
 mkdir -p $DEST
 
 #### copy binary ####
-cp $BUILD/nekobox $DEST
+# CMake 目标产物名为 nekoboxpro（原为 nekobox，改名后此处未同步）
+cp $BUILD/nekoboxpro $DEST
 
 #### Download: prebuilt runtime ####
 curl -Lso usr.zip https://github.com/MatsuriDayo/nekoray_qt_runtime/releases/download/20220503/20230202-5.12.8-ubuntu20.04-linux64.zip

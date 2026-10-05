@@ -85,3 +85,5 @@ CMakeLists.txt.user*
 
 .vs
 out
+# aqtinstall 运行日志（误提交过，勿再入库）
+aqtinstall.log

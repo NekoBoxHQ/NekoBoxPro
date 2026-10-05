@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QRegularExpression>
 
 namespace NekoGui_sys {
 
@@ -49,7 +50,17 @@ namespace NekoGui_sys {
                     }
                 }
             });
-            MW_show_log_ext(tag, "External core starting: " + env.join(" ") + " " + program + " " + arguments.join(" "));
+            // 命令行与环境变量可能含明文凭据（例如 naive 核心的
+            // --proxy=naive+https://user:password@host）。日志面板与日志文件不得原样落盘，
+            // 此处剥离 URL userinfo 中的密码部分。
+            auto redactCreds = [](const QString &s) {
+                static const QRegularExpression credRe(QStringLiteral(R"(://([^:/@\s]+):[^@\s/]+@)"));
+                QString out = s;
+                out.replace(credRe, QStringLiteral("://\\1:***@"));
+                return out;
+            };
+            MW_show_log_ext(tag, "External core starting: " + redactCreds(env.join(" ")) + " " +
+                                     program + " " + redactCreds(arguments.join(" ")));
         }
 
         QProcess::setEnvironment(env);
