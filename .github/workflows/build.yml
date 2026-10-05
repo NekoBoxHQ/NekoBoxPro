@@ -209,7 +209,8 @@ jobs:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MSG=$(printf '<b>NekoBoxPro v%s released</b>\n\nsing-box %s\nWindows / Linux\n%s' \
+          export LANG=C.UTF-8 LC_ALL=C.UTF-8
+          MSG=$(printf '<b>NekoBoxPro v%s 已发布</b>\n\nsing-box %s\nWindows / Linux\n%s' \
             "${{ env.NEKO_VERSION }}" \
             "${{ env.SING_BOX_VERSION }}" \
             "https://github.com/NekoBoxHQ/NekoBoxPro")
