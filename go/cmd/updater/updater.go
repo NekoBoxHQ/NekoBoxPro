@@ -78,7 +78,7 @@ func Updater() {
 	if runtime.GOOS == "windows" {
 		updateSrc = "./nekobox_update"
 	} else {
-		updateSrc = "./nekobox_update/nekobox"
+		updateSrc = "./nekobox_update/nekoboxpro"
 	}
 	err := Mv(updateSrc, "./")
 	if err != nil {

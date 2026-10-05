@@ -73,7 +73,7 @@ DialogEditProfile::DialogEditProfile(const QString &_type, int profileOrGroupId,
             ui->ws_early_data_name->setVisible(false);
             ui->ws_early_data_name_l->setVisible(false);
         }
-        // 传输设置 for NekoBox
+        // 传输设置 for NekoBoxPro
         if (!ui->utlsFingerprint->count()) ui->utlsFingerprint->addItems(Preset::SingBox::UtlsFingerPrint);
         // 传输设置 是否可见
         int networkBoxVisible = 0;
@@ -274,7 +274,7 @@ void DialogEditProfile::typeSelected(const QString &newType) {
     // 星号
     ADD_ASTERISK(this)
 
-    // 设置 for NekoBox
+    // 设置 for NekoBoxPro
     if (type == "vmess" || type == "vless") {
         ui->packet_encoding->setVisible(true);
         ui->packet_encoding_l->setVisible(true);

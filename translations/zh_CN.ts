@@ -717,11 +717,11 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
         <source>If you have trouble starting VPN, you can force reset nekobox_core process here.
 
 If still not working, see documentation for more information.
-https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</source>
+https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs</source>
         <translation>如果您在启动 Tun 时遇到问题，您可以在此处强制重置 nekobox_core 进程。
 
 如果仍然无法正常工作，请参阅文档以获取更多信息。
-https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</translation>
+https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs</translation>
     </message>
     <message>
         <source>Reset</source>
@@ -737,9 +737,9 @@ https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</translation>
     </message>
     <message>
         <source>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</source>
+This needs to be run NekoBoxPro with administrator privileges.</source>
         <translation>在配置文件启动时添加一个tun inbound，而不是使用两个进程。
-这需要以管理员权限运行NekoBox。</translation>
+这需要以管理员权限运行NekoBoxPro。</translation>
     </message>
 </context>
 <context>
@@ -1451,8 +1451,8 @@ Split by line.</source>
         <translation>重启程序生效。</translation>
     </message>
     <message>
-        <source>Please run NekoBox as admin</source>
-        <translation>请以管理员权限运行 NekoBox</translation>
+        <source>Please run NekoBoxPro as admin</source>
+        <translation>请以管理员权限运行 NekoBoxPro</translation>
     </message>
     <message>
         <source>Restart Proxy</source>

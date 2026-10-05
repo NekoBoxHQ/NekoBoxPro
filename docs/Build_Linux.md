@@ -1,9 +1,9 @@
-在 Linux 下编译 NekoBox
+在 Linux 下编译 NekoBoxPro
 
 ## git clone 源码
 
 ```
-git clone https://github.com/NekoBoxHQ/NekoBox.git --recursive
+git clone https://github.com/NekoBoxHQ/NekoBoxPro.git --recursive
 ```
 
 ## 简单编译法
@@ -22,9 +22,9 @@ cmake -GNinja ..
 ninja
 ```
 
-编译完成后得到 `nekobox`
+编译完成后得到 `nekoboxpro`
 
-解压 Release 的压缩包，替换其中的 `nekobox`，删除 `launcher` 即可使用。
+解压 Release 的压缩包，替换其中的 `nekoboxpro`，删除 `launcher` 即可使用。
 
 ## 复杂编译法
 
@@ -69,7 +69,7 @@ cmake -GNinja ..
 ninja
 ```
 
-编译完成后得到 `nekobox`
+编译完成后得到 `nekoboxpro`
 
 ### Go 部分编译
 

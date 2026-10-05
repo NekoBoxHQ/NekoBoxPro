@@ -2,22 +2,22 @@
 
 ### 方式一：AppImage（推荐）
 
-下载 `NekoBox-Linux-x64.AppImage`，赋予执行权限后直接运行：
+下载 `NekoBoxPro-Linux-x64.AppImage`，赋予执行权限后直接运行：
 
 ```shell
-chmod +x NekoBox-Linux-x64.AppImage
-./NekoBox-Linux-x64.AppImage
+chmod +x NekoBoxPro-Linux-x64.AppImage
+./NekoBoxPro-Linux-x64.AppImage
 ```
 
 AppImage 自带 Qt 运行库，开箱即用，无需额外安装依赖。
 
 ### 方式二：便携包（tar.gz）
 
-下载 `NekoBox-Linux64.tar.gz`，解压后运行目录中的 `nekobox`：
+下载 `NekoBoxPro-Linux64.tar.gz`，解压后运行目录中的 `nekoboxpro`：
 
 ```shell
-tar xzf NekoBox-Linux64.tar.gz
-./nekobox/nekobox
+tar xzf NekoBoxPro-Linux64.tar.gz
+./nekoboxpro/nekoboxpro
 ```
 
 ### 其他发行版说明
@@ -31,7 +31,7 @@ tar xzf NekoBox-Linux64.tar.gz
 
 便携包解压后，目录内包含：
 
-- `nekobox`：主程序（GUI）
+- `nekoboxpro`：主程序（GUI）
 - `nekobox_core`：sing-box 内核（RPC 模式）
 - `sing-box`：sing-box 命令行内核（自定义核心）
 - `updater`：自动更新程序

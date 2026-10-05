@@ -717,7 +717,7 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
         <source>If you have trouble starting VPN, you can force reset nekobox_core process here.
 
 If still not working, see documentation for more information.
-https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</source>
+https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -734,7 +734,7 @@ https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</source>
     </message>
     <message>
         <source>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</source>
+This needs to be run NekoBoxPro with administrator privileges.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -1441,7 +1441,7 @@ End: %2</source>
         <translation type="unfinished">تنظیمات تغییر کرد</translation>
     </message>
     <message>
-        <source>Please run NekoBox as admin</source>
+        <source>Please run NekoBoxPro as admin</source>
         <translation type="unfinished">لطفا Nekobox را با مجوز ادمین اجرا کنید</translation>
     </message>
     <message>

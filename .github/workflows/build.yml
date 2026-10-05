@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.10
+  NEKO_VERSION: 5.0.11
   SING_BOX_VERSION: v1.14.2
   # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
   LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61
@@ -144,14 +144,14 @@ jobs:
           cmake -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$QT_ROOT;$DEPS_ROOT" -DQt6_DIR="$QT_ROOT/lib/cmake/Qt6" ..
           ninja -j4
-          cp NekoBox.exe "$GITHUB_WORKSPACE/deployment/windows64/"
+          cp NekoBoxPro.exe "$GITHUB_WORKSPACE/deployment/windows64/"
 
       - name: Deploy Qt runtime (windeployqt)
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE/deployment/windows64"
           windeployqt --release --no-translations --no-system-d3d-compiler \
-            --no-opengl-sw --no-compiler-runtime NekoBox.exe
+            --no-opengl-sw --no-compiler-runtime NekoBoxPro.exe
           cp "$QT_ROOT/translations/qtbase_zh_CN.qm" .
 
       - name: Package zip (exclude user config)
@@ -159,7 +159,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE/deployment/windows64"
           rm -rf config stderr.txt nekobox.png
-          "C:/Program Files/7-Zip/7z.exe" a -tzip -mx5 "$GITHUB_WORKSPACE/NekoBox-Windows64.zip" ./*
+          "C:/Program Files/7-Zip/7z.exe" a -tzip -mx5 "$GITHUB_WORKSPACE/NekoBoxPro-Windows64.zip" ./*
 
       - name: Sign release asset (minisign)
         if: startsWith(github.ref, 'refs/tags/')
@@ -174,7 +174,7 @@ jobs:
           choco install -y minisign >/dev/null 2>&1 || true
           export PATH="$PATH:/c/ProgramData/chocolatey/bin"
           printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
-          minisign -S -m NekoBox-Windows64.zip -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Windows64.zip.minisig
+          minisign -S -m NekoBoxPro-Windows64.zip -s /tmp/nekobox.key -t "NekoBoxPro v${{ env.NEKO_VERSION }}" -x NekoBoxPro-Windows64.zip.minisig
           rm -f /tmp/nekobox.key
 
       - name: Upload Windows artifact
@@ -182,22 +182,22 @@ jobs:
         with:
           name: nekobox-windows64
           path: |
-            NekoBox-Windows64.zip
-            NekoBox-Windows64.zip.minisig
+            NekoBoxPro-Windows64.zip
+            NekoBoxPro-Windows64.zip.minisig
 
       - name: Publish GitHub Release (Windows)
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            NekoBox-Windows64.zip
-            NekoBox-Windows64.zip.minisig
+            NekoBoxPro-Windows64.zip
+            NekoBoxPro-Windows64.zip.minisig
           body: |
-            **NekoBox v${{ env.NEKO_VERSION }}** 已发布 / Released.
+            **NekoBoxPro v${{ env.NEKO_VERSION }}** 已发布 / Released.
 
             单内核 sing-box 客户端 · 稳定优先 · 最小复杂度
 
-            更新日志 / Changelog: https://github.com/NekoBoxHQ/NekoBox/releases
+            更新日志 / Changelog: https://github.com/NekoBoxHQ/NekoBoxPro/releases
           update_release_body: true
 
       - name: Notify Telegram Group
@@ -207,10 +207,10 @@ jobs:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          MSG=$(printf '<b>NekoBox v%s 已发布</b>\n\n🔧 内核: sing-box v%s\n🖥️ 平台: Windows / Linux\n🔗 项目: %s' \
+          MSG=$(printf '<b>NekoBoxPro v%s 已发布</b>\n\n🔧 内核: sing-box v%s\n🖥️ 平台: Windows / Linux\n🔗 项目: %s' \
             "${{ env.NEKO_VERSION }}" \
             "${{ env.SING_BOX_VERSION }}" \
-            "https://github.com/NekoBoxHQ/NekoBox")
+            "https://github.com/NekoBoxHQ/NekoBoxPro")
           curl -s -m 30 -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d "chat_id=${TG_CHAT}" \
             --data-urlencode "text=${MSG}" \
@@ -344,7 +344,7 @@ jobs:
           cmake -GNinja -DQT_VERSION_MAJOR=6 -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$Qt6_DIR/../../..;$DEPS_ROOT" ..
           ninja -j4
-          cp nekobox "$GITHUB_WORKSPACE/deployment/linux64/"
+          cp nekoboxpro "$GITHUB_WORKSPACE/deployment/linux64/"
 
       - name: Stage runtime assets
         shell: bash
@@ -360,11 +360,11 @@ jobs:
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
           mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
-          printf '[Desktop Entry]\nType=Application\nName=NekoBox\nComment=NekoBox proxy client\nExec=nekobox\nIcon=nekobox\nCategories=Network;Qt;\nTerminal=false\n' > AppDir/usr/share/applications/nekobox.desktop
+          printf '[Desktop Entry]\nType=Application\nName=NekoBoxPro\nComment=NekoBoxPro proxy client\nExec=nekoboxpro\nIcon=nekobox\nCategories=Network;Qt;\nTerminal=false\n' > AppDir/usr/share/applications/nekobox.desktop
           cp res/public/nekobox.png AppDir/usr/share/icons/hicolor/256x256/apps/nekobox.png
-          export LDAI_OUTPUT="NekoBox-Linux-x64.AppImage"
+          export LDAI_OUTPUT="NekoBoxPro-Linux-x64.AppImage"
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
-            --executable deployment/linux64/nekobox \
+            --executable deployment/linux64/nekoboxpro \
             --plugin qt \
             --output appimage
 
@@ -373,8 +373,8 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE/deployment"
           rm -rf linux64/config
-          mv linux64 nekobox
-          tar czf "$GITHUB_WORKSPACE/NekoBox-Linux64.tar.gz" nekobox
+          mv linux64 nekoboxpro
+          tar czf "$GITHUB_WORKSPACE/NekoBoxPro-Linux64.tar.gz" nekoboxpro
 
       - name: Sign release assets (minisign)
         if: startsWith(github.ref, 'refs/tags/')
@@ -388,8 +388,8 @@ jobs:
           fi
           sudo apt-get update -qq && sudo apt-get install -y -qq minisign
           printf '%s\n' "$NEKO_MINISIGN_SECRET_KEY" > /tmp/nekobox.key
-          minisign -S -m NekoBox-Linux-x64.AppImage -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Linux-x64.AppImage.minisig
-          minisign -S -m NekoBox-Linux64.tar.gz -s /tmp/nekobox.key -t "NekoBox v${{ env.NEKO_VERSION }}" -x NekoBox-Linux64.tar.gz.minisig
+          minisign -S -m NekoBoxPro-Linux-x64.AppImage -s /tmp/nekobox.key -t "NekoBoxPro v${{ env.NEKO_VERSION }}" -x NekoBoxPro-Linux-x64.AppImage.minisig
+          minisign -S -m NekoBoxPro-Linux64.tar.gz -s /tmp/nekobox.key -t "NekoBoxPro v${{ env.NEKO_VERSION }}" -x NekoBoxPro-Linux64.tar.gz.minisig
           rm -f /tmp/nekobox.key
 
       - name: Upload Linux artifact
@@ -397,17 +397,17 @@ jobs:
         with:
           name: nekobox-linux64
           path: |
-            NekoBox-Linux-x64.AppImage
-            NekoBox-Linux-x64.AppImage.minisig
-            NekoBox-Linux64.tar.gz
-            NekoBox-Linux64.tar.gz.minisig
+            NekoBoxPro-Linux-x64.AppImage
+            NekoBoxPro-Linux-x64.AppImage.minisig
+            NekoBoxPro-Linux64.tar.gz
+            NekoBoxPro-Linux64.tar.gz.minisig
 
       - name: Publish GitHub Release (Linux)
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            NekoBox-Linux-x64.AppImage
-            NekoBox-Linux-x64.AppImage.minisig
-            NekoBox-Linux64.tar.gz
-            NekoBox-Linux64.tar.gz.minisig
+            NekoBoxPro-Linux-x64.AppImage
+            NekoBoxPro-Linux-x64.AppImage.minisig
+            NekoBoxPro-Linux64.tar.gz
+            NekoBoxPro-Linux64.tar.gz.minisig

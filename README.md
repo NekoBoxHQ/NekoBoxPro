@@ -1,4 +1,4 @@
-# NekoBox
+# NekoBoxPro
 
 > 基于 [MatsuriDayo/NekoRay](https://github.com/MatsuriDayo/NekoRay)（GPLv3，上游衍生自 Qv2ray）的修改版，与原版的差异见 [NOTICE](./NOTICE)。仅使用 sing-box 单一内核。
 
@@ -9,11 +9,11 @@ A modern sing-box GUI client. 单内核 · 稳定优先 · 最小复杂度
 
 ## 界面展示
 
-![NekoBox](docs/screenshot.png)
+![NekoBoxPro](docs/screenshot.png)
 
 ## 简介
 
-NekoBox 是一款基于 NekoRay 修改的现代 sing-box GUI 客户端，仅使用 sing-box 单一内核，稳定优先、面向长期维护。
+NekoBoxPro 是一款基于 NekoRay 修改的现代 sing-box GUI 客户端，仅使用 sing-box 单一内核，稳定优先、面向长期维护。
 
 ## 特性
 
@@ -37,15 +37,15 @@ NekoBox 是一款基于 NekoRay 修改的现代 sing-box GUI 客户端，仅使�
 
 ### Windows
 
-1. 从 [Releases](https://github.com/NekoBoxHQ/NekoBox/releases/latest) 下载 `NekoBox-Windows64.zip`
-2. 解压后运行 `NekoBox.exe`
+1. 从 [Releases](https://github.com/NekoBoxHQ/NekoBoxPro/releases/latest) 下载 `NekoBoxPro-Windows64.zip`
+2. 解压后运行 `NekoBoxPro.exe`
 
 若提示缺少运行库，请安装 [微软 C++ 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
 
 ### Linux
 
-- 下载 `NekoBox-Linux-x64.AppImage` 直接运行
-- 或下载 `NekoBox-Linux64.tar.gz` 解压运行
+- 下载 `NekoBoxPro-Linux-x64.AppImage` 直接运行
+- 或下载 `NekoBoxPro-Linux64.tar.gz` 解压运行
 
 Linux 运行教程见 [docs/Run_Linux.md](docs/Run_Linux.md)。
 
@@ -62,7 +62,7 @@ Linux 运行教程见 [docs/Run_Linux.md](docs/Run_Linux.md)。
 ## 构建
 
 ```bash
-git clone https://github.com/NekoBoxHQ/NekoBox
+git clone https://github.com/NekoBoxHQ/NekoBoxPro
 ```
 
 构建依赖（GPLv3）：
@@ -73,22 +73,17 @@ CI 按固定 commit 克隆上述 fork（可复现构建）；两者的源码随�
 
 推送 tag 后由 GitHub Actions 自动构建并发布。
 
-技术文档见 [docs](https://github.com/NekoBoxHQ/NekoBox/tree/main/docs)。
+技术文档见 [docs](https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs)。
 
 ### 发布签名（minisign）
 
-客户端内置自动更新会**强制校验发布包签名**：updater 在解压前用编译进二进制的公钥验签，公钥未配置或签名缺失时拒绝更新（fail-closed）。
+客户端内置自动更新会**强制校验发布包签名**：updater 在解压前用编译进二进制的公钥验签，签名缺失或验签失败时拒绝更新（fail-closed）。
 
-首次启用签名发布：
-1. 生成密钥对：`minisign -G -s nekobox.key -p nekobox.pub`
-2. 将**私钥**内容加入 GitHub Secrets：`NEKO_MINISIGN_SECRET_KEY`
-3. 将 `nekobox.pub` 内容替换到 `go/cmd/updater/updater.go` 的 `minisignPublicKey` 常量并提交
-
-CI 在 tag 发布时对 `NekoBox-Windows64.zip`、`NekoBox-Linux64.tar.gz`、`NekoBox-Linux-x64.AppImage` 分别生成 `<资产>.minisig` 并随 release 上传。
+发布资产由 CI 在 tag 发布时经 minisign 签名（私钥存于 GitHub Secret `NEKO_MINISIGN_SECRET_KEY`），每个 `NekoBoxPro-Windows64.zip` / `NekoBoxPro-Linux64.tar.gz` / `NekoBoxPro-Linux-x64.AppImage` 均附 `<资产>.minisig`。
 
 ## 讨论群组
 
-加入 Telegram 群组交流反馈: [NekoBox 讨论群](https://t.me/+Kdxyw8yLTz85ODg5)
+加入 Telegram 群组交流反馈: [NekoBoxPro 讨论群](https://t.me/+Kdxyw8yLTz85ODg5)
 
 ## License
 

@@ -270,7 +270,9 @@ set_target_properties(nekobox PROPERTIES
 )
 
 if (WIN32)
-    set_target_properties(nekobox PROPERTIES OUTPUT_NAME "NekoBox")
+    set_target_properties(nekobox PROPERTIES OUTPUT_NAME "NekoBoxPro")
+else ()
+    set_target_properties(nekobox PROPERTIES OUTPUT_NAME "nekoboxpro")
 endif ()
 
 # Target Source Translations

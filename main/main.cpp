@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
     // dirs & clean
     auto wd = QDir(QApplication::applicationDirPath());
     if (NekoGui::dataStore->flag_use_appdata) {
-        QApplication::setApplicationName("NekoBox");
+        QApplication::setApplicationName("NekoBoxPro");
         if (!NekoGui::dataStore->appdataDir.isEmpty()) {
             wd.setPath(NekoGui::dataStore->appdataDir);
         } else {

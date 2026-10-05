@@ -682,9 +682,9 @@ For more information, see the document &quot;Configuration/DNS&quot;.</source>
     </message>
     <message>
         <source>Add a tun inbound to the profile startup, instead of using two processes.
-This needs to be run NekoBox with administrator privileges.</source>
+This needs to be run NekoBoxPro with administrator privileges.</source>
         <translation>Добавить inbound c Tun в конфигурацию профиля вместо того, чтобы использовать два отдельных процесса.
-Для этого необходимо запускать NekoBox c правами администратора.</translation>
+Для этого необходимо запускать NekoBoxPro c правами администратора.</translation>
     </message>
     <message>
         <source>Internal Tun</source>
@@ -726,11 +726,11 @@ This needs to be run NekoBox with administrator privileges.</source>
         <source>If you have trouble starting VPN, you can force reset nekobox_core process here.
 
 If still not working, see documentation for more information.
-https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</source>
+https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs</source>
         <translation>Если у вас проблемы с запуском VPN, можно принудительно перезапустить процесс nekobox-core.
 
 Если ничего по-прежнему не работает, ознакомьтесь с документацией:
-https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</translation>
+https://github.com/NekoBoxHQ/NekoBoxPro/tree/main/docs</translation>
     </message>
     <message>
         <source>Reset</source>
@@ -1359,8 +1359,8 @@ https://github.com/NekoBoxHQ/NekoBox/tree/main/docs</translation>
         <translation>Импортирован(ы) %1 профиль(ей)</translation>
     </message>
     <message>
-        <source>Please run NekoBox as admin</source>
-        <translation>Пожалуйста, запустите NekoBox с правами администратора</translation>
+        <source>Please run NekoBoxPro as admin</source>
+        <translation>Пожалуйста, запустите NekoBoxPro с правами администратора</translation>
     </message>
     <message>
         <source>Current server is incompatible with Tun. Please stop the server first, enable Tun Mode, and then restart.</source>
