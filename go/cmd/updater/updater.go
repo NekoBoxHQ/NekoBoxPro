@@ -17,14 +17,12 @@ import (
 
 // minisign 发布公钥（编译进二进制的信任锚）。
 //
-// 首次启用签名发布时需要完成：
-//  1. 生成密钥对：minisign -G -s nekobox.key -p nekobox.pub
-//  2. 将私钥内容加入 GitHub Secrets：NEKO_MINISIGN_SECRET_KEY
-//  3. 将公钥内容替换到下方常量（保留 "RW..." 前缀）
-//
-// 公钥未配置（仍为占位值）时，验签必然失败，更新将拒绝执行（fail-closed），
-// 防止任何无签名更新落地。
-const minisignPublicKey = "RWS_PLACEHOLDER_REPLACE_WITH_REAL_PUBLIC_KEY"
+// 私钥（nekobox.key）已由本项目生成器产出并保管于发布者本机，
+// 其内容需配置在 GitHub Secret：NEKO_MINISIGN_SECRET_KEY。
+// 公钥即下方常量（minisign .pub 文件第二行的 base64 串）。
+// 签名发布链路：CI tag 发布时对每个 release 资产生成 <资产>.minisig，
+// updater 在解压前验签；任何一步失败都拒绝更新（fail-closed）。
+const minisignPublicKey = "RWQJ/40yF6iTrj0ygW9w+I+3Ol+yXPDNaFw6AhjoPByVoayuurfmZqxl"
 
 // maxExtractSize 是解压内容总大小上限（2 GiB），防止 zip bomb / tar bomb。
 const maxExtractSize = 2 << 30
