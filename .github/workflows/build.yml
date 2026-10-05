@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.12
+  NEKO_VERSION: 5.0.13
   SING_BOX_VERSION: v1.14.2
   # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
   LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61
@@ -284,9 +284,10 @@ jobs:
             "${{ env.NEKO_VERSION }}" \
             "${{ env.SING_BOX_VERSION }}" \
             "https://github.com/NekoBoxHQ/NekoBoxPro" > "$MSG_FILE"
-          # Self-check: expected to be exactly 109 bytes at 5.0.12 / v1.14.2.
-          # If this number is ever off, the body was already damaged before the
-          # request left the runner, so the fault is here and not on Telegram's side.
+          # Self-check: 109 bytes while NEKO_VERSION and SING_BOX_VERSION keep
+          # their current lengths. If this number is ever off, the body was already
+          # damaged before the request left the runner, so the fault is here and
+          # not on Telegram's side.
           echo "telegram message bytes: $(wc -c < "$MSG_FILE")"
           # -sS: stay quiet but still surface errors. It used to be plain -s, so a
           # Telegram API error was swallowed and the step still reported success.
