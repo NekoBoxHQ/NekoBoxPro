@@ -23,19 +23,29 @@ namespace NekoGui_traffic {
         if (interval <= 0) return nullptr;
 
         // query
+        // ⚠️ QueryStats 返回的是 core 里的**累计值**（只增不减的计数器），不是增量。
+        // 原来直接 `item->downlink += downlink`，等于把累计值每轮都累加一遍，
+        // 流量会按运行时间的平方虚高。改成先算增量（本次累计 - 上次累计）。
         auto uplink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "uplink");
         auto downlink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "downlink");
 
+        // 增量；core 重启后计数清零，此时"当前 < 上次"，判为计数器被重置过，
+        // diff 取 0（不倒退、不虚增），并把基准同步到当前值。
+        auto diff_down = downlink >= item->last_downlink ? downlink - item->last_downlink : 0;
+        auto diff_up = uplink >= item->last_uplink ? uplink - item->last_uplink : 0;
+        item->last_downlink = downlink;
+        item->last_uplink = uplink;
+
         // add diff
-        item->downlink += downlink;
-        item->uplink += uplink;
-        item->downlink_rate = downlink * 1000 / interval;
-        item->uplink_rate = uplink * 1000 / interval;
+        item->downlink += diff_down;
+        item->uplink += diff_up;
+        item->downlink_rate = diff_down * 1000 / interval;
+        item->uplink_rate = diff_up * 1000 / interval;
 
         // return diff
         auto ret = new TrafficData(item->tag);
-        ret->downlink = downlink;
-        ret->uplink = uplink;
+        ret->downlink = diff_down;
+        ret->uplink = diff_up;
         ret->downlink_rate = item->downlink_rate;
         ret->uplink_rate = item->uplink_rate;
         return ret;
