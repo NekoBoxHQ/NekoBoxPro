@@ -578,10 +578,17 @@ namespace NekoGui {
             dnsServers.append(directObj);
         }
         }
-        dnsRules.append(QJsonObject{
-            {"outbound", "any"},
-            {"server", status->forTest ? "dns-local" : "dns-direct"},
-        });
+        // ⚠️ 这里不能再放「catch-all → dns-direct」的 DNS 规则（曾是 {"outbound":"any"}）。
+        //
+        // sing-box 的 DNS 规则是**首个匹配生效**，而 `{"outbound":"any"}` 会匹配**每一条**
+        // DNS 查询 —— 于是全部 DNS 都被按「直连」解析，绕开代理，等于 DNS 全泄露；真机
+        // 复现的 core 日志就是 `dns: match[0] outbound=any => route(dns-direct)`。
+        // 它排在数组首位，还会把下面 domainListDNSRemote（走代理）那几条规则整个盖掉，
+        // dns_routing 形同失效。（`outbound` 这个 DNS 规则项 sing-box 1.12 起已废弃、
+        // 1.14 移除，本就不该再用。）
+        //
+        // 默认 DNS 由服务器顺序（dns_final_out）决定：proxy → dns-remote，bypass →
+        // dns-direct；某类域名要固定走哪个 server，由下面的 domainListDNS* 规则指定。
 
         // Fakedns
         if (dataStore->fake_dns && dataStore->vpn_internal_tun && dataStore->spmode_vpn && !status->forTest) {
