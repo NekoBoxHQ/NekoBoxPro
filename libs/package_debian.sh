@@ -26,7 +26,7 @@ if [ ! -s /usr/share/applications/nekoray.desktop ]; then
 Name=nekoray
 Comment=Qt based cross-platform GUI proxy configuration manager (backend: sing-box)
 Exec=sh -c "PATH=/opt/nekobox:\$PATH /opt/nekobox/nekobox -appdata"
-Icon=/opt/nekobox/nekobox.png
+Icon=/opt/nekobox/nekoboxpro.png
 Terminal=false
 Type=Application
 Categories=Network;Application;
