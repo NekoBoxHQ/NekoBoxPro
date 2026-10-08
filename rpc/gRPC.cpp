@@ -240,7 +240,7 @@ namespace NekoGui_rpc {
         }
     }
 
-    long long Client::QueryStats(const std::string &tag, const std::string &direct) {
+    long long Client::QueryStats(const std::string &tag, const std::string &direct, bool *rpcOK) {
         libcore::QueryStatsReq request;
         request.set_tag(tag);
         request.set_direct(direct);
