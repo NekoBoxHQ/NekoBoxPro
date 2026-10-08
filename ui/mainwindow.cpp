@@ -28,6 +28,7 @@
 
 #ifdef Q_OS_WIN
 #include "3rdparty/WinCommander.hpp"
+#include "sys/windows/guihelper.h"
 #else
 #ifdef Q_OS_LINUX
 #include "sys/linux/LinuxCap.h"
@@ -681,6 +682,12 @@ void MainWindow::on_menu_exit_triggered() {
     MF_release_runguard();
     if (exit_reason == 1) {
         QDir::setCurrent(QApplication::applicationDirPath());
+#ifdef Q_OS_WIN
+        // updater 也是「被主程序拉起」的，同样会撞上 Internet 下载标记拦截
+        // （表现是「点了更新没反应」）。这里用的是相对路径 ./updater，CWD 已在上一行
+        // 设成程序目录，因此直接传相对路径即可。
+        Windows_RemoveMarkOfTheWeb("./updater");
+#endif
         QProcess::startDetached("./updater", QStringList{});
     } else if (exit_reason == 2 || exit_reason == 3) {
         QDir::setCurrent(QApplication::applicationDirPath());

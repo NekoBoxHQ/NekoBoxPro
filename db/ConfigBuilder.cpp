@@ -10,6 +10,10 @@
 #include <QFileInfo>
 #include <QProcess>
 
+#ifdef Q_OS_WIN
+#include "sys/windows/guihelper.h"
+#endif
+
 #define BOX_UNDERLYING_DNS dataStore->core_box_underlying_dns.isEmpty() ? "local" : dataStore->core_box_underlying_dns
 
 namespace NekoGui {
@@ -782,6 +786,12 @@ namespace NekoGui {
                 } else {
                     QProcess p;
                     p.setWorkingDirectory(ruleSetDir);
+#ifdef Q_OS_WIN
+                    // 同 sys/ExternalProcess：带 Internet 下载标记的文件被拉起会被 Windows
+                    // 拦下。这里失败是**静默**的（导不出 rule_set，随后核心报 rule_set not
+                    // found，看起来像另一个问题），所以启动前同样摘掉标记。
+                    Windows_RemoveMarkOfTheWeb(cli);
+#endif
                     if (tag.startsWith("geoip-")) {
                         p.start(cli, {"geoip", "export", category, "-f", geoip});
                     } else {

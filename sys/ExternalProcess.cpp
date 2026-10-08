@@ -5,7 +5,12 @@
 #include <QDir>
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QRegularExpression>
+
+#ifdef Q_OS_WIN
+#include "sys/windows/guihelper.h"
+#endif
 
 namespace NekoGui_sys {
 
@@ -66,6 +71,16 @@ namespace NekoGui_sys {
                                      program + " " + redactCreds(arguments.join(" ")));
         }
 
+#ifdef Q_OS_WIN
+        // 启动前摘掉「Internet 下载标记」。
+        // Windows 会拦截「带此标记的可执行文件被其它进程拉起」（Windows 11 尤其严格，
+        // 且不弹任何提示），拦截时 CreateProcess 返回 ERROR_FILE_NOT_FOUND —— 用户看到
+        // 的就是「进程启动失败：系统找不到指定的文件」，只会以为文件丢了。
+        // 核心是从这里拉起的，所以在这一处统一处理。
+        if (Windows_RemoveMarkOfTheWeb(program)) {
+            MW_show_log("[Info] removed download mark (Zone.Identifier) from: " + program + "\n");
+        }
+#endif
         QProcess::setEnvironment(env);
         QProcess::start(program, arguments);
     }
@@ -120,7 +135,18 @@ namespace NekoGui_sys {
         connect(this, &QProcess::errorOccurred, this, [&](QProcess::ProcessError error) {
             if (error == QProcess::ProcessError::FailedToStart) {
                 failed_to_start = true;
+                // 这条报错最常见的成因不是「文件真丢了」，而是被系统/安全软件拦下：
+                // 带 Internet 下载标记的可执行文件被别的进程拉起时，Windows 直接返回
+                // 「找不到指定的文件」，用户从报错里看不出是被拦了。光说一句「找不到
+                // 指定的文件」毫无指向性，所以把实际路径和存在性一并打出来。
+                // 注意：Windows 的 CreateProcess 会自动补 .exe，而 QFileInfo 不会，
+                // 所以存在性要两种写法都查（核心路径本来就不带 .exe）。
+                const auto exists = QFileInfo::exists(program) || QFileInfo::exists(program + ".exe");
                 MW_show_log("start core error occurred: " + errorString() + "\n");
+                MW_show_log("[Error] core path: " + program + " (" + (exists ? "exists" : "missing") + ")\n");
+                if (exists) {
+                    MW_show_log("[Error] " + QObject::tr("File exists but failed to start — most likely blocked by Windows or security software (downloaded-file mark, SmartScreen, antivirus). Fix: right-click the exe -> Properties -> check \"Unblock\"; or add this app folder to your security software's whitelist, then restart.") + "\n");
+                }
             }
         });
         connect(this, &QProcess::stateChanged, this, [&](QProcess::ProcessState state) {
