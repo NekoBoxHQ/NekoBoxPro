@@ -126,13 +126,19 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
 
     runOnNewThread([this, profiles, mode, full_test_flags]() {
         QMutex lock_write;
-        QMutex lock_return;
+        QSemaphore done; // 每个 worker 彻底退出时 release 一次；控制线程 acquire(threadN) 一次等齐
         int threadN = NekoGui::dataStore->test_concurrent;
-        int threadN_finished = 0;
         auto profiles_test = profiles; // copy
 
         // Threads
-        lock_return.lock();
+        // ⚠️ 不要跨线程 unlock 互斥量（Qt 明确不允许，属未定义行为）。这里改用 QSemaphore：
+        // 每个 worker 彻底退出时 release 一次，控制线程 acquire(threadN) 一次性等齐。
+        // 关键：**每条退出路径**（队列空、!rpcOK）都必须走到 workerQuit，否则计数对不上、
+        // 控制线程会永久卡住（原来 `!rpcOK return` 就漏了这一步）。
+        auto workerQuit = [&]() {
+            speedtesting_threads.removeAll(QObject::thread());
+            done.release();
+        };
         for (int i = 0; i < threadN; i++) {
             runOnNewThread([&] {
                 speedtesting_threads << QObject::thread();
@@ -141,15 +147,8 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                     //
                     lock_write.lock();
                     if (profiles_test.isEmpty()) {
-                        threadN_finished++;
-                        if (threadN == threadN_finished) {
-                            // quit control thread
-                            lock_return.unlock();
-                        }
                         lock_write.unlock();
-                        // quit of this thread
-                        speedtesting_threads.removeAll(QObject::thread());
-                        return;
+                        break;
                     }
                     auto profile = profiles_test.takeFirst();
                     lock_write.unlock();
@@ -218,7 +217,7 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         extSem.acquire();
                     }
                     //
-                    if (!rpcOK) return;
+                    if (!rpcOK) break; // 本 worker 到此为止；不能 return —— 会跳过 workerQuit、卡死控制线程
 
                     if (result.error().empty()) {
                         profile->latency = result.ms();
@@ -240,12 +239,12 @@ void MainWindow::speedtest_current_group(int mode, bool test_group) {
                         refresh_proxy_list(profileId);
                     });
                 }
+                workerQuit();
             });
         }
 
-        // Control
-        lock_return.lock();
-        lock_return.unlock();
+        // Control：等所有 worker 彻底退出（各自 release 一次）
+        done.acquire(threadN);
         speedtesting = false;
         // 每条测试已有单独结果日志，不再输出冗余的 finished 提示
     });
@@ -309,7 +308,13 @@ void MainWindow::ping_current() {
     st->profiles = profiles;
     st->maxConcurrent = NekoGui::dataStore->test_concurrent > 0 ? NekoGui::dataStore->test_concurrent : 8;
 
-    st->kick = [this, st]() {
+    // ⚠️ kick 不能再按值捕获 st（= shared_ptr<PingState>）：kick 存在 st->kick 里、
+    // 又持有 st → 自引用环，PingState 永远不释放（每次 Ping 漏一个）。
+    // 改成捕获 weak_ptr：kick 调用期间才临时 lock 出强引用；真正把 PingState 保活的
+    // 是每个收尾回调里按值捕获的 st（全部 Ping 结束、最后一个回调释放后即回收）。
+    st->kick = [this, wst = std::weak_ptr<PingState>(st)]() {
+        auto st = wst.lock(); // 本次调用期间的强引用
+        if (!st) return;
         while (st->started < st->profiles.size() && (st->started - st->finished) < st->maxConcurrent) {
             auto profile = st->profiles[st->started];
             st->started++;
@@ -318,16 +323,29 @@ void MainWindow::ping_current() {
                 st->finished++;
                 continue;
             }
+            // serverAddress 形如 "-xxx" 会被 ping 当成选项，跳过（避免参数注入）
+            if (host.startsWith("-")) {
+                st->finished++;
+                continue;
+            }
             MW_show_log(tr("[Ping] %1 (%2)").arg(profile->bean->DisplayTypeAndName(), host));
             auto p = new QProcess(this);
-            auto output = new QString;
+            // output 改用 shared_ptr：readyRead 与收尾回调共用，收尾时不必手动 delete，
+            // 也就不会出现"删掉之后 readyRead 又写一次"的 use-after-free。
+            auto output = std::make_shared<QString>();
             p->setProcessChannelMode(QProcess::MergedChannels);
             connect(p, &QProcess::readyReadStandardOutput, this, [=] {
                 auto out = QString::fromLocal8Bit(p->readAllStandardOutput());
                 *output += out;
                 MW_show_log_ext_vt100(out);
             });
-            connect(p, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, [=](int code, QProcess::ExitStatus) {
+            // 收尾只做一次：正常退出走 finished；**启动失败（FailedToStart）Qt 只发
+            // errorOccurred、不发 finished**，必须在那边也收尾，否则 output 泄漏、
+            // finished 不增、并发窗口被永久占住 → 整组剩余节点静默不再 ping。
+            auto done = std::make_shared<bool>(false);
+            auto finishOne = [this, st, profile, output, p, done](int exitCode) {
+                if (*done) return;
+                *done = true;
                 // 解析平均延迟（Windows 中文/英文 + Linux rtt），同步写入"测试结果"列
                 QRegularExpression re("(?:平均|Average)\\s*=\\s*(\\d+)\\s*ms");
                 auto m = re.match(*output);
@@ -346,11 +364,15 @@ void MainWindow::ping_current() {
                     auto pid = profile->id;
                     runOnUiThread([this, pid] { refresh_proxy_list(pid); });
                 }
-                MW_show_log(tr("[Ping] finished (exit %1)").arg(code));
+                if (exitCode >= 0) MW_show_log(tr("[Ping] finished (exit %1)").arg(exitCode));
                 p->deleteLater();
-                delete output;
                 st->finished++;
-                st->kick();
+                st->kick(); // 推进下一个
+            };
+            connect(p, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+                    [=](int code, QProcess::ExitStatus) { finishOne(code); });
+            connect(p, &QProcess::errorOccurred, this, [=](QProcess::ProcessError err) {
+                if (err == QProcess::FailedToStart) finishOne(-1);
             });
 #ifdef Q_OS_WIN
             p->start("ping", QStringList{"-n", "4", host});
@@ -510,7 +532,9 @@ void MainWindow::neko_stop(bool crash, bool sem) {
         if (NekoGui::dataStore->traffic_loop_interval != 0) {
             NekoGui_traffic::trafficLooper->UpdateAll();
             for (const auto &item: NekoGui_traffic::trafficLooper->items) {
-                NekoGui::profileManager->GetProfile(item->id)->Save();
+                // 节点可能已被删除（items 里还留着旧 id）→ GetProfile 可能返回空，别直接解引用
+                auto p = NekoGui::profileManager->GetProfile(item->id);
+                if (p != nullptr) p->Save();
                 runOnUiThread([=] { refresh_proxy_list(item->id); });
             }
         }
@@ -553,7 +577,8 @@ void MainWindow::neko_stop(bool crash, bool sem) {
 
     runOnNewThread([=] {
         // do stop
-        MW_show_log(">>>>>>>> " + tr("Stopping profile %1").arg(running->bean->DisplayTypeAndName()));
+        // running 可能已被 stage2 置空（或从没设过），解引用前必须判空
+        MW_show_log(">>>>>>>> " + tr("Stopping profile %1").arg(running != nullptr ? running->bean->DisplayTypeAndName() : QStringLiteral("?")));
         if (!neko_stop_stage2()) {
             MW_show_log("<<<<<<<< " + tr("Failed to stop, please restart the program."));
         }

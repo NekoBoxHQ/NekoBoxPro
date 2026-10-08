@@ -589,10 +589,12 @@ namespace NekoGui_sub {
         QList<std::shared_ptr<NekoGui::ProxyEntity>> only_out;    // 只在更新后有的
         QList<std::shared_ptr<NekoGui::ProxyEntity>> update_del;  // 更新前后都有的，需要删除的新配置
         QList<std::shared_ptr<NekoGui::ProxyEntity>> update_keep; // 更新前后都有的，被保留的旧配置
+        QList<int> savedOrder;                                    // 解析前的节点顺序，空结果时还原
 
         // 订阅解析前
         if (group != nullptr) {
             in = group->Profiles();
+            savedOrder = group->order;
             group->sub_last_update = QDateTime::currentMSecsSinceEpoch() / 1000;
             group->info = sub_user_info;
             group->order.clear();
@@ -635,33 +637,44 @@ namespace NekoGui_sub {
                     notice_deleted += "[-] " + ent->bean->DisplayTypeAndName() + "\n";
                 }
 
-                // sort according to order in remote
-                group->order = {};
-                for (const auto &ent: rawUpdater->updated_order) {
-                    auto deleted_index = update_del.indexOf(ent);
-                    if (deleted_index > 0) {
-                        if (deleted_index >= update_keep.count()) continue; // should not happen
-                        auto ent2 = update_keep[deleted_index];
-                        group->order.append(ent2->id);
-                    } else {
-                        group->order.append(ent->id);
+                if (rawUpdater->updated_order.isEmpty()) {
+                    // ★ 订阅返回 HTTP 200 但一个节点都没解析出来（空 body / 到期提示页 / {"proxies":[]}）：
+                    //   必须保留现有配置与顺序、绝不清理。否则下面 cleanup 会因为 order 为空
+                    //   而把整组节点逐个 DeleteProfile —— 静默丢配置。
+                    MW_show_log(QObject::tr("Subscription %1 parsed no profiles, keeping existing.")
+                                        .arg(group->name));
+                    group->order = savedOrder;
+                    group->Save();
+                    change_text = QObject::tr("Nothing");
+                } else {
+                    // sort according to order in remote
+                    group->order = {};
+                    for (const auto &ent: rawUpdater->updated_order) {
+                        auto deleted_index = update_del.indexOf(ent);
+                        if (deleted_index >= 0) { // indexOf 返回 0 是合法下标（差一错误曾写成 >0）
+                            if (deleted_index >= update_keep.count()) continue; // should not happen
+                            auto ent2 = update_keep[deleted_index];
+                            group->order.append(ent2->id);
+                        } else {
+                            group->order.append(ent->id);
+                        }
                     }
-                }
-                group->Save();
+                    group->Save();
 
-                // cleanup
-                for (const auto &ent: out_all) {
-                    if (!group->order.contains(ent->id)) {
-                        NekoGui::profileManager->DeleteProfile(ent->id);
+                    // cleanup
+                    for (const auto &ent: out_all) {
+                        if (!group->order.contains(ent->id)) {
+                            NekoGui::profileManager->DeleteProfile(ent->id);
+                        }
                     }
-                }
 
-                change_text = "\n" + QObject::tr("Added %1 profiles:\n%2\nDeleted %3 Profiles:\n%4")
-                                         .arg(only_out.length())
-                                         .arg(notice_added)
-                                         .arg(only_in.length())
-                                         .arg(notice_deleted);
-                if (only_out.length() + only_in.length() == 0) change_text = QObject::tr("Nothing");
+                    change_text = "\n" + QObject::tr("Added %1 profiles:\n%2\nDeleted %3 Profiles:\n%4")
+                                             .arg(only_out.length())
+                                             .arg(notice_added)
+                                             .arg(only_in.length())
+                                             .arg(notice_deleted);
+                    if (only_out.length() + only_in.length() == 0) change_text = QObject::tr("Nothing");
+                }
             }
 
             MW_show_log("<<<<<<<< " + QObject::tr("Change of %1:").arg(group->name) + "\n" + change_text);

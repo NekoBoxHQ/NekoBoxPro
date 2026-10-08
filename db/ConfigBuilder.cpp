@@ -328,23 +328,30 @@ namespace NekoGui {
             status->result->outboundStats += ent->traffic_data;
 
             // mux common
-            auto needMux = ent->type == "vmess" || ent->type == "trojan" || ent->type == "vless";
-            needMux &= dataStore->mux_concurrency > 0;
-
+            // 先算"这条出站能不能 mux"：协议支持 + 全局并发数 > 0 + 传输允许 + vless 没带 flow。
+            // 用户显式开/关只在这个基础上调，绝不能反过来盖掉它。
+            auto muxable = ent->type == "vmess" || ent->type == "trojan" || ent->type == "vless";
+            muxable &= dataStore->mux_concurrency > 0;
             if (stream != nullptr) {
                 if (stream->network == "grpc" || stream->network == "quic" || (stream->network == "http" && stream->security == "tls")) {
-                    needMux = false;
-                }
-                if (stream->multiplex_status == 0) {
-                    if (!dataStore->mux_default_on) needMux = false;
-                } else if (stream->multiplex_status == 1) {
-                    needMux = true;
-                } else if (stream->multiplex_status == 2) {
-                    needMux = false;
+                    muxable = false;
                 }
             }
             if (ent->type == "vless" && outbound["flow"] != "") {
-                needMux = false;
+                muxable = false;
+            }
+
+            bool needMux = muxable;
+            if (stream != nullptr) {
+                if (stream->multiplex_status == 0) {
+                    if (!dataStore->mux_default_on) needMux = false;
+                } else if (stream->multiplex_status == 1) {
+                    // 用户"强制开 mux"：仍受上面的 muxable 约束 —— 否则会在 gRPC 节点上生成
+                    // mux+gRPC（sing-box 不支持）或 max_streams=0 的非法配置，内核直接起不来。
+                    needMux = muxable;
+                } else if (stream->multiplex_status == 2) {
+                    needMux = false;
+                }
             }
 
             // common
@@ -523,7 +530,7 @@ namespace NekoGui {
         QJsonArray dnsServers;
         QJsonArray dnsRules;
 
-        auto buildDnsServer = [](const QString &tag, const QString &address, const QString &detour, const QString &domainResolver) {
+        auto buildDnsServer = [](const QString &tag, const QString &address, const QString &detour, const QString &domainResolver, const QString &strategy) {
             QJsonObject obj{{"tag", tag}};
             if (!domainResolver.isEmpty()) obj["domain_resolver"] = domainResolver;
             // sing-box 1.13+: DNS 服务器默认 dialer 即直连，显式 detour 到空的 direct 出站会报错，故省略
@@ -562,16 +569,19 @@ namespace NekoGui {
             obj["type"] = type;
             obj["server"] = server;
             if (!path.isEmpty()) obj["path"] = path;
+            // DNS 服务器的地址族策略（prefer_ipv4 / ipv6_only …）。UI 里一直有这个设置，
+            // 但重构后没再写出来 → 设了不生效。这里补回。
+            if (!strategy.isEmpty()) obj["strategy"] = strategy;
             return obj;
         };
 
         // Remote
         if (!status->forTest)
-            dnsServers += buildDnsServer("dns-remote", dataStore->routing->remote_dns, tagProxy, "dns-local");
+            dnsServers += buildDnsServer("dns-remote", dataStore->routing->remote_dns, tagProxy, "dns-local", dataStore->routing->remote_dns_strategy);
 
         // Direct（forTest 用系统 DNS 最稳：DoH 服务器不可达时 URL 测试会整体失败）
         if (!status->forTest) {
-        QJsonObject directObj = buildDnsServer("dns-direct", dataStore->routing->direct_dns, "direct", "dns-local");
+        QJsonObject directObj = buildDnsServer("dns-direct", dataStore->routing->direct_dns, "direct", "dns-local", dataStore->routing->direct_dns_strategy);
         if (dataStore->routing->dns_final_out == "bypass") {
             dnsServers.prepend(directObj);
         } else {
@@ -601,7 +611,7 @@ namespace NekoGui {
         }
 
         // Underlying 100% Working DNS ?
-        dnsServers += buildDnsServer("dns-local", BOX_UNDERLYING_DNS, "direct", "");
+        dnsServers += buildDnsServer("dns-local", BOX_UNDERLYING_DNS, "direct", "", "");
 
         // sing-box dns rule object
         auto add_rule_dns = [&](const QStringList &list, const QString &server) {
@@ -740,8 +750,8 @@ namespace NekoGui {
         // geopath（sing-box 1.14: geoip/geosite 数据库已移除，geoip:/geosite: 规则改用 rule_set）
         auto geoip = FindCoreAsset("geoip.db");
         auto geosite = FindCoreAsset("geosite.db");
-        if (geoip.isEmpty()) status->result->error = +"geoip.db not found";
-        if (geosite.isEmpty()) status->result->error = +"geosite.db not found";
+        if (geoip.isEmpty()) status->result->error = "geoip.db not found";
+        if (geosite.isEmpty()) status->result->error = "geosite.db not found";
 
         // 按需生成 geoip/geosite rule_set（调用内置 sing-box CLI 导出）
         QJsonArray ruleSets;
@@ -795,12 +805,19 @@ namespace NekoGui {
         if (status->forTest) routingRules = {};
         if (!status->forTest) QJSONARRAY_ADD(routingRules, QString2QJsonObject(dataStore->custom_route_global)["rules"].toArray())
         QJSONARRAY_ADD(routingRules, status->routingRules)
+
+        // 「默认出站 = Block」：sing-box 1.14 已经没有 block 出站，route.final 不能写 "block"
+        // （内核会报 outbound not found: block、整个配置加载失败、节点起不来）。翻译成一条
+        // 兜底 reject 规则（放最后，任何未匹配的流量全拒），final 退回 direct（被兜底挡住、走不到）。
+        bool finalIsBlock = !status->forTest && dataStore->routing->def_outbound == "block";
+        if (finalIsBlock) routingRules += QJsonObject{{"action", "reject"}};
+
         auto routeObj = QJsonObject{
             {"rules", routingRules},
             {"auto_detect_interface", dataStore->spmode_vpn}, // TODO force enable?
         };
         if (!ruleSets.isEmpty()) routeObj["rule_set"] = ruleSets;
-        if (!status->forTest) routeObj["final"] = dataStore->routing->def_outbound;
+        if (!status->forTest) routeObj["final"] = finalIsBlock ? "direct" : dataStore->routing->def_outbound;
         if (status->forExport) {
             routeObj.remove("auto_detect_interface");
         }
@@ -847,8 +864,15 @@ namespace NekoGui {
         // auth
         QString socks_user_pass;
         if (dataStore->inbound_auth->NeedAuth()) {
-            socks_user_pass = R"( "username": "%1", "password": "%2", )";
-            socks_user_pass = socks_user_pass.arg(dataStore->inbound_auth->username, dataStore->inbound_auth->password);
+            // ⚠️ 不能用 arg() 把用户名/密码直接拼进 JSON 模板 —— 没做转义，密码里含一个 `"`
+            // 或 `\` 就会生成坏 JSON、VPN 配置起不来。交给 QJsonObject 序列化来转义。
+            QJsonObject authObj{
+                {"username", dataStore->inbound_auth->username},
+                {"password", dataStore->inbound_auth->password},
+            };
+            auto authJson = QJsonObject2QString(authObj, false); // {"username":"…","password":"…"}
+            // 模板里它是一段对象成员，去掉外层花括号、补个逗号即可
+            socks_user_pass = authJson.mid(1, authJson.length() - 2) + ",";
         }
         // gen config
         auto configFn = ":/neko/vpn/sing-box-vpn.json";

@@ -249,8 +249,12 @@ namespace NekoGui_rpc {
         auto status = default_grpc_channel->Call("QueryStats", request, &reply, 500);
 
         if (status == QNetworkReply::NoError) {
+            if (rpcOK != nullptr) *rpcOK = true;
             return reply.traffic();
         } else {
+            // ⚠️ 失败时返回 0 —— 调用方必须靠 rpcOK 区分「真的是 0」与「查询失败」，
+            // 否则会把失败的 0 当成基准写回去（见 TrafficLooper::update_stats）。
+            if (rpcOK != nullptr) *rpcOK = false;
             return 0;
         }
     }

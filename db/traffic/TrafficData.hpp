@@ -20,7 +20,7 @@ namespace NekoGui_traffic {
         long long last_downlink = 0;
         long long last_uplink = 0;
 
-        long long last_update;
+        long long last_update = 0;
 
         explicit TrafficData(std::string tag) {
             this->tag = std::move(tag);

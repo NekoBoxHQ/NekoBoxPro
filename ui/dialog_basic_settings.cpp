@@ -93,7 +93,9 @@ DialogBasicSettings::DialogBasicSettings(QWidget *parent)
 #endif
 
     // Style
-    ui->connection_statistics_box->setDisabled(true);
+    // 原先这里 setDisabled(true) 把「连接统计」整块灰掉、不可点选，但 accept() 仍按
+    // 复选框的既有值保存 —— 于是界面显示"不可用"、实际却沿用旧值生效，误导用户。
+    // 放开它，让这个开关跟真实配置一致（能看、能改、存的就是看到的）。
     //
     D_LOAD_BOOL(check_include_pre)
     D_LOAD_BOOL(connection_statistics)

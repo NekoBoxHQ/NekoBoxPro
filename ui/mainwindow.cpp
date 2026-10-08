@@ -1181,6 +1181,8 @@ void MainWindow::on_menu_profile_debug_info_triggered() {
         NekoGui::profileManager->LoadManager();
         refresh_proxy_list();
     }
+    // 对话框是 new 出来的，用完得回收；否则父对象是 this，要等主窗销毁才释放（每次打开漏一个）
+    box->deleteLater();
 }
 
 void MainWindow::on_menu_copy_links_triggered() {
@@ -1510,9 +1512,11 @@ void MainWindow::show_log_impl(const QString &log) {
 
     QStringList newLines;
     auto log_ignore = NekoGui::dataStore->log_ignore;
-    // 内置噪音过滤：只过滤真正无意义的调试/网络噪音，保留连接日志
-    log_ignore << "network: updated" << "dns: " << "router: "
-               << "connection: " << "inbound DNS packet" << "creating stack"
+    // 内置噪音过滤：只过滤真正无意义的调试/网络噪音。
+    // ⚠️ 别把 `dns: ` / `router: ` / `connection: ` 也滤掉 —— 那是排障最需要的三类
+    //（DNS 解析、路由匹配、连接建立/关闭）。滤了等于核心的连接/DNS 日志在面板里凭空消失。
+    log_ignore << "network: updated"
+               << "inbound DNS packet" << "creating stack"
                << "close http-client";
     for (const auto &line: lines) {
         bool showThisLine = true;
@@ -1824,9 +1828,12 @@ bool MainWindow::StartVPNProcess() {
 }
 
 bool MainWindow::StopVPNProcess(bool unconditional) {
+    // core_process 在 runOnUiThread(..., DS_cores) 里异步创建，启动早期它还是 nullptr；
+    // 这里无脑解引用会空指针崩溃，先挡一道。（原来那行独立语句 core_process->processId()
+    // 丢弃返回值、无副作用，一并去掉。）
+    if (core_process == nullptr) return true;
     if (unconditional || vpn_pid != 0) {
         bool ok;
-        core_process->processId();
 #ifdef Q_OS_WIN
         auto ret = WinCommander::runProcessElevated("taskkill", {"/IM", "nekobox_core.exe",
                                                                  "/FI",

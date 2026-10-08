@@ -24,7 +24,7 @@ namespace NekoGui_rpc {
 
         QString Stop(bool *rpcOK);
 
-        long long QueryStats(const std::string &tag, const std::string &direct);
+        long long QueryStats(const std::string &tag, const std::string &direct, bool *rpcOK = nullptr);
 
         std::string ListConnections();
 

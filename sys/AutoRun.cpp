@@ -148,6 +148,7 @@ bool AutoRun_IsEnabled() {
 #include <QStandardPaths>
 #include <QProcessEnvironment>
 #include <QTextStream>
+#include <QRegularExpression>
 
 #define NEWLINE "\n"
 
@@ -163,30 +164,46 @@ QString getUserAutostartDir_private() {
     return config;
 }
 
+// 开机自启要执行的命令（SetEnabled / IsEnabled 共用，后者才能拿它来比对）。
+static QStringList Linux_GetAutoRunCmdList() {
+    QStringList appCmdList;
+    // nekoray: launcher
+    if (qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1") {
+        appCmdList << QApplication::applicationDirPath() + "/launcher"
+                   << "--";
+    } else if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
+        appCmdList << QProcessEnvironment::systemEnvironment().value("APPIMAGE");
+    } else {
+        appCmdList << QApplication::applicationFilePath();
+    }
+    appCmdList << "-tray";
+    if (NekoGui::dataStore->flag_use_appdata) appCmdList << "-appdata";
+    return appCmdList;
+}
+
+// 按 Desktop Entry 规范拼 Exec= 的右值：含空格/特殊字符的项要用双引号包起来并转义。
+// 不加引号时，路径里带空格会让 Exec 被截断（本该执行的可执行 + 参数全乱），开机自启直接失效。
+static QString Linux_GenAutoRunExec() {
+    static const QRegularExpression needQuote(QStringLiteral(R"([^A-Za-z0-9_./:+=@%,-])"));
+    QStringList parts;
+    for (const auto &arg: Linux_GetAutoRunCmdList()) {
+        if (arg.contains(needQuote)) {
+            QString e = arg;
+            e.replace("\\", "\\\\");
+            e.replace("\"", "\\\"");
+            parts << "\"" + e + "\"";
+        } else {
+            parts << arg;
+        }
+    }
+    return parts.join(" ");
+}
+
 void AutoRun_SetEnabled(bool enable) {
     // From https://github.com/nextcloud/desktop/blob/master/src/common/utility_unix.cpp
     QString appName = QCoreApplication::applicationName();
     QString userAutoStartPath = getUserAutostartDir_private();
     QString desktopFileLocation = userAutoStartPath + appName + QLatin1String(".desktop");
-    QStringList appCmdList;
-
-    // nekoray: launcher
-    if (qEnvironmentVariable("NKR_FROM_LAUNCHER") == "1") {
-        appCmdList << QApplication::applicationDirPath() + "/launcher"
-                   << "--";
-    } else {
-        if (QProcessEnvironment::systemEnvironment().contains("APPIMAGE")) {
-            appCmdList << QProcessEnvironment::systemEnvironment().value("APPIMAGE");
-        } else {
-            appCmdList << QApplication::applicationFilePath();
-        }
-    }
-
-    appCmdList << "-tray";
-
-    if (NekoGui::dataStore->flag_use_appdata) {
-        appCmdList << "-appdata";
-    }
 
     if (enable) {
         if (!QDir().exists(userAutoStartPath) && !QDir().mkpath(userAutoStartPath)) {
@@ -209,7 +226,7 @@ void AutoRun_SetEnabled(bool enable) {
 #endif
         ts << QLatin1String("[Desktop Entry]") << NEWLINE
            << QLatin1String("Name=") << appName << NEWLINE
-           << QLatin1String("Exec=") << appCmdList.join(" ") << NEWLINE
+           << QLatin1String("Exec=") << Linux_GenAutoRunExec() << NEWLINE
            << QLatin1String("Terminal=") << "false" << NEWLINE
            << QLatin1String("Categories=") << "Network" << NEWLINE
            << QLatin1String("Type=") << "Application" << NEWLINE
@@ -225,7 +242,19 @@ void AutoRun_SetEnabled(bool enable) {
 bool AutoRun_IsEnabled() {
     QString appName = QCoreApplication::applicationName();
     QString desktopFileLocation = getUserAutostartDir_private() + appName + QLatin1String(".desktop");
-    return QFile::exists(desktopFileLocation);
+
+    // 光看文件在不在不够：程序被挪走/换路径后 `.desktop` 里的 Exec 就失效了，
+    // 菜单不能还显示"已启用"。跟 Windows 分支一样，比对 Exec= 是否还指向当前这份可执行。
+    QFile f(desktopFileLocation);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    const auto content = QString::fromUtf8(f.readAll());
+    f.close();
+
+    const auto expected = QStringLiteral("Exec=") + Linux_GenAutoRunExec();
+    for (const auto &line: content.split(QLatin1Char('\n'))) {
+        if (line.startsWith(QLatin1String("Exec="))) return line.trimmed() == expected;
+    }
+    return false;
 }
 
 #endif

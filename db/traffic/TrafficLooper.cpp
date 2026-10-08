@@ -19,15 +19,22 @@ namespace NekoGui_traffic {
         // last update
         auto now = elapsedTimer.elapsed();
         auto interval = now - item->last_update;
-        item->last_update = now;
         if (interval <= 0) return nullptr;
 
         // query
         // ⚠️ QueryStats 返回的是 core 里的**累计值**（只增不减的计数器），不是增量。
         // 原来直接 `item->downlink += downlink`，等于把累计值每轮都累加一遍，
         // 流量会按运行时间的平方虚高。改成先算增量（本次累计 - 上次累计）。
-        auto uplink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "uplink");
-        auto downlink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "downlink");
+        bool okUp = false, okDown = false;
+        auto uplink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "uplink", &okUp);
+        auto downlink = NekoGui_rpc::defaultClient->QueryStats(item->tag, "downlink", &okDown);
+
+        // ⚠️ 查询失败（超时/出错）时 QueryStats 返回 0，那不是真实计数。此时**绝不能**
+        // 把基准 last_* 写成 0 —— 否则下一次成功轮询会算出 `累计值 - 0`，把整段会话流量
+        // 当成一轮增量重复计入（就是"平方级虚高"换了个触发路径）。失败时连 last_update
+        // 也不动，下一轮重来。
+        if (!okUp || !okDown) return nullptr;
+        item->last_update = now;
 
         // 增量；core 重启后计数清零，此时"当前 < 上次"，判为计数器被重置过，
         // diff 取 0（不倒退、不虚增），并把基准同步到当前值。

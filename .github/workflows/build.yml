@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.17
+  NEKO_VERSION: 5.0.18
   SING_BOX_VERSION: v1.14.2
   # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
   LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61

@@ -50,7 +50,7 @@ namespace NekoGui_sys {
                     }
                 }
             });
-            // 命令行与环境变量可能含明文凭据（例如 naive 核心的
+            // 命令行可能含明文凭据（例如 naive 核心的
             // --proxy=naive+https://user:password@host）。日志面板与日志文件不得原样落盘，
             // 此处剥离 URL userinfo 中的密码部分。
             auto redactCreds = [](const QString &s) {
@@ -59,7 +59,10 @@ namespace NekoGui_sys {
                 out.replace(credRe, QStringLiteral("://\\1:***@"));
                 return out;
             };
-            MW_show_log_ext(tag, "External core starting: " + redactCreds(env.join(" ")) + " " +
+            // ⚠️ 不要把整份进程环境变量写进日志：env 是完整的 systemEnvironment()，
+            // 里面有各种 token / 密钥，redactCreds 只处理 URL userinfo、挡不住它们。
+            // 只记「程序 + 参数」（参数里若含 URL 凭据仍会被脱敏）。
+            MW_show_log_ext(tag, "External core starting: " +
                                      program + " " + redactCreds(arguments.join(" ")));
         }
 
