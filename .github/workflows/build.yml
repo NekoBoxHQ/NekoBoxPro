@@ -18,11 +18,11 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.19
-  SING_BOX_VERSION: v1.14.2
+  NEKO_VERSION: 5.0.20
+  SING_BOX_VERSION: v1.14.3
   # 依赖 fork 已公开（GPLv3 源码可得），克隆固定 commit 保证可复现构建
   LIB_NEKO_COMMIT: db371472351d852e203cdb3ee322d086c2b94a61
-  SING_BOX_COMMIT: 05366eaf8783c0fe9dc5ee75fb6035745bbf8a8e
+  SING_BOX_COMMIT: 245cd414f929d287d1a91161398e6aebadea683e
   # geo 数据固定版本（官方 release，均附带官方 sha256sum，CI 内强制校验）
   GEOIP_DB_VER: 20260912
   GEOSITE_DB_VER: 20260925013933

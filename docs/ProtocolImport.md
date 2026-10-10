@@ -1,6 +1,6 @@
 # 协议导入支持表
 
-> 基于内核版本：sing-box **v1.14.1**（升级内核后同步更新本表）
+> 基于内核版本：sing-box **v1.14.3**（升级内核后同步更新本表）
 >
 > 维护约定：本项目仅使用 sing-box 单一内核；协议导入链路为 `链接 → Bean(TryParseLink) → BuildCoreObjSingBox → sing-box JSON`。
 > 同一协议存在多种链接格式时（如 vless reality / vless ws / vless grpc），统一在对应 Bean 的 `TryParseLink` 内部分支处理，不拆多个 parser。
