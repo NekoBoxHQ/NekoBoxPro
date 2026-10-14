@@ -190,8 +190,11 @@ require (
 
 replace grpc_server => ../../grpc_server
 
-replace github.com/matsuridayo/libneko => ../../../../libneko
+// libneko 已经并入本仓库（go/libneko），不再是外部仓库
+replace github.com/matsuridayo/libneko => ../../../go/libneko
 
+// sing-box：CI 会把上游 SagerNet/sing-box 的固定 tag 克隆到仓库的**兄弟目录**，
+// 并打上 patches/ 里的补丁（见 .github/workflows/build.yml）
 replace github.com/sagernet/sing-box => ../../../../sing-box
 
 // sing-quic: 使用官方模块版本（本地 fork 已停更）

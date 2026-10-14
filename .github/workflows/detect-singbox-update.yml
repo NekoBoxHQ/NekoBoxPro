@@ -38,7 +38,7 @@ jobs:
             TITLE="sing-box 上游发布新版本 v${UP}（当前 v${CUR}），请安排内核同步"
             EXISTS=$(gh issue list --repo NekoBoxHQ/NekoBox --state open --search "sing-box 上游发布新版本" --json number --jq 'length' || echo 0)
             if [ "$EXISTS" = "0" ]; then
-              BODY=$(printf '上游 sing-box（sagernet/sing-box）已发布 v%s，项目当前依赖 v%s。\n\n内核同步步骤：\n1. 同步 sing-box fork（NekoBoxHQ/sing-box 拉取上游 v%s）\n2. bump 依赖：go/cmd/nekobox_core/go.mod 中 github.com/sagernet/sing-box 版本号改为 v%s\n3. 本地重编 nekobox_core + 全链路测试（代理连通、协议导入验证）\n4. 协议对齐：若 sing-box 新增协议/参数，补 Bean 导入支持并更新 docs/ProtocolImport.md\n5. 发版：bump NEKO_VERSION → tag → CI 自动构建 → Release\n6. 客户端「检查更新」自动升级' "$UP" "$CUR" "$UP" "$UP")
+              BODY=$(printf '上游 sing-box（sagernet/sing-box）已发布 v%s，项目当前依赖 v%s。\n\n内核同步步骤：\n1. 升 tag：build.yml 的 SING_BOX_VERSION 改为 v%s\n2. 重打补丁：确认 patches/ 下的补丁仍能干净应用（本地 git apply --check，CI 也会拦）\n3. 本地重编 nekobox_core + 全链路测试（代理连通、协议导入验证）\n4. 协议对齐：若 sing-box 新增协议/参数，补 Bean 导入支持并更新 docs/ProtocolImport.md\n5. 发版：bump NEKO_VERSION → tag → CI 自动构建 → Release\n6. 客户端「检查更新」自动升级' "$UP" "$CUR" "$UP")
               gh issue create --repo NekoBoxHQ/NekoBox --title "$TITLE" --body "$BODY"
               echo "已创建提醒 Issue：$TITLE"
             else

@@ -5,7 +5,7 @@
 A modern sing-box GUI client. 单内核 · 稳定优先 · 最小复杂度
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![sing-box](https://img.shields.io/badge/sing--box-1.14.3-blue)](https://github.com/NekoBoxHQ/sing-box)
+[![sing-box](https://img.shields.io/badge/sing--box-1.14.3-blue)](https://github.com/SagerNet/sing-box)
 
 ## 界面展示
 
@@ -66,10 +66,10 @@ git clone https://github.com/NekoBoxHQ/NekoBoxPro
 ```
 
 构建依赖（GPLv3）：
-- `NekoBoxHQ/libneko`（公开 fork，对应公开上游 https://github.com/MatsuriDayo/libneko）
-- `NekoBoxHQ/sing-box`（公开 fork，对应公开上游 https://github.com/SagerNet/sing-box）
+- **libneko**：已并入本仓库 [`go/libneko`](./go/libneko)（对应公开上游 https://github.com/MatsuriDayo/libneko）
+- **sing-box**：直接用上游 https://github.com/SagerNet/sing-box 的**固定 tag**（见 `SING_BOX_VERSION`），CI 克隆后打上本仓库 [`patches/`](./patches) 里的补丁
 
-CI 按固定 commit 克隆上述 fork（可复现构建）；两者的源码随构建产物一起可得。
+CI 按固定 tag + 仓库内源码构建（可复现）；对 sing-box 的改动以补丁文件形式公开在本仓库，内核源码随构建产物一起可得。
 
 推送 tag 后由 GitHub Actions 自动构建并发布。
 

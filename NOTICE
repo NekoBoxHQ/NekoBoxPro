@@ -12,8 +12,13 @@ NekoBoxPro 是基于 **MatsuriDayo/NekoRay** 的修改版（fork）。
 - Qv2ray（NekoRay 的上游）
   - 上游仓库：https://github.com/Qv2ray/Qv2ray
   - 上游许可证：GNU General Public License v3.0（GPLv3）
-- sing-box（代理内核，本组织 fork 为 NekoBoxHQ/sing-box）
+- sing-box（代理内核）
   - 上游仓库：https://github.com/SagerNet/sing-box
+  - 使用方式：**直接使用上游的固定 tag**（v1.14.3，见 `.github/workflows/build.yml`
+    的 `SING_BOX_VERSION`），构建时打上本仓库 `patches/` 里的补丁；
+    本组织不再维护、也不再发布名为 sing-box 的 fork 仓库
+  - 本项目的修改：1 处，见 `patches/sing-box-0001-platform-log-disable-colors.patch`
+    （平台日志格式器禁用 ANSI 颜色，避免系统/平台日志里出现转义符）
   - 上游许可证：GNU General Public License v3.0 or later
     Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
   - 上游 LICENSE 附名称限制条款：未经事先同意，衍生作品不得使用
@@ -32,7 +37,9 @@ NekoRay 5.0.10 全部代码，后续修改均为独立提交。由于仓库历�
 - 配置生成：db/ConfigBuilder.cpp 大幅改写（sing-box 配置生成）
 - 自动更新链路：内置自动更新（go/grpc_server/update.go、go/cmd/updater）
 - 构建与发布：GitHub Actions 全自动构建发布；依赖
-  NekoBoxHQ/libneko 与 NekoBoxHQ/sing-box（见 README「构建」）
+  libneko（已并入本仓库 `go/libneko`）与上游 sing-box 固定 tag + `patches/`（见 README「构建」）
+- 依赖收敛：libneko 由外部仓库并入本仓库，sing-box 由自维护 fork 改为
+  「上游 tag + 补丁文件」，组织内不再需要额外维护内核相关仓库
 - 界面与品牌：名称、图标、README、Telegram 通知等品牌化调整
 
 兼容性保留
