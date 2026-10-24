@@ -5,7 +5,7 @@
 A modern sing-box GUI client. 单内核 · 稳定优先 · 最小复杂度
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![sing-box](https://img.shields.io/badge/sing--box-1.14.3-blue)](https://github.com/SagerNet/sing-box)
+[![sing-box](https://img.shields.io/badge/sing--box-1.14.4-blue)](https://github.com/SagerNet/sing-box)
 
 ## 界面展示
 

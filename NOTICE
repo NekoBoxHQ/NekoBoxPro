@@ -14,7 +14,7 @@ NekoBoxPro 是基于 **MatsuriDayo/NekoRay** 的修改版（fork）。
   - 上游许可证：GNU General Public License v3.0（GPLv3）
 - sing-box（代理内核）
   - 上游仓库：https://github.com/SagerNet/sing-box
-  - 使用方式：**直接使用上游的固定 tag**（v1.14.3，见 `.github/workflows/build.yml`
+  - 使用方式：**直接使用上游的固定 tag**（v1.14.4，见 `.github/workflows/build.yml`
     的 `SING_BOX_VERSION`），构建时打上本仓库 `patches/` 里的补丁；
     本组织不再维护、也不再发布名为 sing-box 的 fork 仓库
   - 本项目的修改：1 处，见 `patches/sing-box-0001-platform-log-disable-colors.patch`

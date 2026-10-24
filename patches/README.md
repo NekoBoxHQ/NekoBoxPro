@@ -5,7 +5,7 @@
 
 ## sing-box-0001-platform-log-disable-colors.patch
 
-- 目标：`SagerNet/sing-box`，版本由 `build.yml` 的 `SING_BOX_VERSION` 钉住（当前 v1.14.3）
+- 目标：`SagerNet/sing-box`，版本由 `build.yml` 的 `SING_BOX_VERSION` 钉住（当前 v1.14.4）
 - 内容：平台日志（journald / 系统日志）用的 formatter 关掉 ANSI 颜色。
   上游 `log/observable.go` 里那句
 

@@ -18,9 +18,9 @@ permissions:
   contents: read
 
 env:
-  NEKO_VERSION: 5.0.21
+  NEKO_VERSION: 5.0.22
   # 内核 = 上游 SagerNet/sing-box 的固定 tag + patches/ 里的补丁（打完补丁即等于以前的 fork）
-  SING_BOX_VERSION: v1.14.3
+  SING_BOX_VERSION: v1.14.4
   SING_BOX_PATCH: sing-box-0001-platform-log-disable-colors.patch
   # geo 数据固定版本（官方 release，均附带官方 sha256sum，CI 内强制校验）
   GEOIP_DB_VER: 20260912
