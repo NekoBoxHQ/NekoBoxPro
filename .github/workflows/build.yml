@@ -24,7 +24,7 @@ env:
   SING_BOX_PATCH: sing-box-0001-platform-log-disable-colors.patch
   # geo 数据固定版本（官方 release，均附带官方 sha256sum，CI 内强制校验）
   GEOIP_DB_VER: 20260912
-  GEOSITE_DB_VER: 20260925013933
+  GEOSITE_DB_VER: 20261024005255
   GEOIP_DAT_VER: 202609270006
   GEOSITE_DAT_VER: 20260925234224
 
